@@ -107,29 +107,23 @@ class SessionStore:
         out.sort(key=lambda m: m.get("started", ""), reverse=True)
         return out
 
-    def _safe_path(self, session_id: str, suffix: str) -> str | None:
-        """Resolve ``<dir>/<id><suffix>`` only if it stays inside the sessions directory.
-
-        The id is already constrained to the store's own shape by ``_SAFE_ID``; this adds the
-        normalise-then-confine barrier (and is what keeps the file reads free of path traversal)."""
-        if not _SAFE_ID.match(session_id):
-            return None
-        base = os.path.normpath(str(self._dir))
-        candidate = os.path.normpath(os.path.join(base, f"{session_id}{suffix}"))
-        if candidate != base and not candidate.startswith(base + os.sep):
-            return None
-        return candidate
-
     def read_session(self, session_id: str) -> dict | None:
-        """One session's metadata plus its ordered events, or ``None`` if there is no such session."""
-        meta_path = self._safe_path(session_id, ".json")
-        events_path = self._safe_path(session_id, ".ndjson")
-        if meta_path is None or events_path is None or not os.path.isfile(meta_path):
+        """One session's metadata plus its ordered events, or ``None`` if there is no such session.
+
+        The requested id is matched against the names of files already in the sessions directory, and the
+        paths that get opened come from that directory listing — never built from the id — so a crafted id
+        (``..``, an absolute path) cannot escape the directory. The anchored ``_SAFE_ID`` check rejects
+        obviously bad input up front."""
+        if not _SAFE_ID.match(session_id) or not self._dir.is_dir():
             return None
-        meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+        meta_path: Path | None = next((p for p in self._dir.glob("*.json") if p.stem == session_id), None)
+        if meta_path is None:
+            return None
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
         events: list[dict] = []
-        if os.path.isfile(events_path):
-            for line in Path(events_path).read_text(encoding="utf-8").splitlines():
+        events_path = meta_path.with_suffix(".ndjson")  # derived from the listed path, not from the id
+        if events_path.is_file():
+            for line in events_path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line:
                     continue
