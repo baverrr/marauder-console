@@ -111,28 +111,61 @@ draft queue — it has no direct serial access.
   categories, analysis views, and architecture diagram refresh (`docs/architecture.svg`).
 - `install.sh` gains a desktop-build path alongside the existing web/service install.
 
-### Phase 6 — Bundled Marauder firmware & flashing (branch `desktop/phase-6-firmware`)
+### Phase 6 — Bundled firmware & complete packaged build (branch `desktop/phase-6-firmware`)
 Rationale: the console and the board's firmware are almost always used together, so ship them together —
-a user should be able to flash a known-good, matching firmware from the same app that drives it.
-- **Vendor the upstream firmware, pinned and attributed.** Add a `firmware/` area holding the prebuilt
-  ESP32 Marauder release `.bin` for this board's target (Cheap Yellow Display / ESP32-2432S028), the
-  upstream flashing docs, and a small `VERSION`/manifest recording the exact upstream tag and commit.
-  Pull it in as either a git submodule pinned to a release tag or a vendored copy under that tag.
-  - **Licensing is a gate, not an afterthought:** confirm the upstream license permits redistribution,
-    include upstream's `LICENSE`/`NOTICE` unmodified next to the binaries, redistribute the firmware
-    unmodified, and keep the existing "independent, unaffiliated" credit. If the license disallows
-    bundling the binary, fall back to a fetch-at-install step that downloads the pinned release instead
-    of committing it. Large binaries may want Git LFS or a release-time fetch rather than living in the
-    tree.
-- **Flashing helper.** A guided "Flash firmware" action (script first, UI later) that runs `esptool`
-  against the chosen serial port with the bundled `.bin`. It must honour the serial-port ownership
-  invariant — the bridge disconnects / releases the port before flashing, and nothing flashes while a
-  session is connected. Flashing is an explicit, confirmed action, never automatic.
-- **Package together.** The Phase 5 bundle includes the firmware payload (or the fetch manifest) so the
-  installed app can offer the matching firmware out of the box; document the board target and how to pick
-  the right `.bin` for other boards.
-- **Acceptance:** from a clean machine, a documented, reproducible path puts the matching firmware on the
-  board using only what ships with the app, with upstream license and attribution intact.
+one download that can flash a known-good, matching firmware and then drive it, with everything it needs on
+a clean machine, fully offline.
+
+> **Status:** 6a (vendored firmware) and 6b (flashing helper) are **implemented** for the
+> `cyd_2432S028` board — `firmware/` holds the v1.20.0 payload + `manifest.json` + upstream MIT license,
+> and `scripts/flash-firmware.sh` flashes it with esptool. 6c (host prereqs) and 6d (one combined
+> release + release CI) remain.
+
+**6a. Vendor the upstream firmware, pinned and attributed.**
+- A `firmware/` area holding the prebuilt ESP32 Marauder release `.bin` for this board's target (Cheap
+  Yellow Display / ESP32-2432S028), the upstream **flashing scripts and docs**, and a `manifest.json`
+  recording the exact upstream tag, commit, and the `sha256` of each `.bin`, plus a board-target table so
+  other boards can pick the right image.
+- Pull it in as a git submodule pinned to a release tag, or a vendored copy under that tag — never an
+  unpinned `master`.
+- **Licensing is a gate, not an afterthought:** confirm the upstream license permits redistribution;
+  include upstream's `LICENSE`/`NOTICE` unmodified next to the binaries; redistribute the firmware
+  unmodified; keep the existing "independent, unaffiliated" credit; and add a top-level
+  `THIRD_PARTY_NOTICES` listing the firmware and every other bundled third-party asset. If the license
+  disallows bundling the binary, fall back to a **fetch-at-install** step that downloads the pinned
+  release (verifying the manifest `sha256`) instead of committing it. Large binaries may want Git LFS or
+  a release-time fetch rather than living in the tree.
+
+**6b. Flashing helper.** A guided "Flash firmware" action (script first, UI later) that runs `esptool`
+against the chosen serial port with the bundled `.bin`. It must honour the serial-port ownership
+invariant — the bridge disconnects / releases the port before flashing, and nothing flashes while a
+session is connected. It reads the chip id first (dry-run/verify), is an explicit, confirmed action
+(never automatic), and records the flashed version so the app can later flag a firmware/reference
+mismatch.
+
+**6c. Host prerequisites for a clean machine.**
+- **USB-serial access:** ship a documented `udev` rule (and/or `dialout`-group guidance) so `/dev/ttyUSB0`
+  is usable without root; the installer offers to set it up — the one step that needs `sudo`, run by the
+  user, never silently.
+- **Driver notes** for the common CYD USB-serial chips (CP210x / CH340).
+- **Version alignment:** record the firmware version that `frontend/src/tools.ts`'s command map targets,
+  so the bundled firmware and the in-app reference match; surface a mismatch (from `info`/`help`) in the UI.
+
+**6d. One combined, offline release.**
+- A single versioned release artifact: the Phase 5 AppImage/`.deb` (with the bundled Python sidecar) +
+  the firmware payload (or fetch manifest) + the flashing helper + docs, so the installed app offers the
+  matching firmware out of the box.
+- `SHA256SUMS` for every artifact and, if a signing key is available, a detached signature.
+- Works **offline** end to end (no external calls at runtime), matching the privacy stance; the optional
+  offline map-tile set (Phase 3) can ride along for a fully-offline bundle.
+- **Release CI** (on tag): build the desktop bundle, assemble the firmware payload, generate `SHA256SUMS`
+  and `THIRD_PARTY_NOTICES`, and attach them to a GitHub Release; the existing ruff / pyright / pytest /
+  CodeQL / frontend jobs stay green. No personal data in artifacts, release notes, or embedded paths
+  (the launcher/installer derive paths at runtime, per Phase 5).
+
+**Acceptance:** from a clean machine, one documented, reproducible path installs the app and flashes the
+matching firmware onto the board using only what ships in the release, fully offline, with upstream
+license + attribution intact and checksums verifiable.
 
 ---
 

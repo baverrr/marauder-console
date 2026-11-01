@@ -1,0 +1,3 @@
+# Flashing-only dependency, installed on demand by scripts/flash-firmware.sh (not needed for the bridge,
+# the tests, or CI). esptool writes the bundled firmware to the board over serial.
+esptool>=4.7
