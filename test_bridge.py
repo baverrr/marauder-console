@@ -7,13 +7,14 @@ stream (status frame, echoed command, live lines), and that disconnect releases 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
 from bridge import SerialManager, create_app
-from serial_source import MockSerialSource, SerialError
+from serial_source import MockSerialSource, SerialError, SerialSource
+from session_store import SessionStore
 
 
 @pytest.fixture
@@ -22,6 +23,35 @@ def client(tmp_path) -> Iterator[TestClient]:
     app = create_app(mock=True, data_dir=tmp_path)
     with TestClient(app) as c:
         yield c
+
+
+class _ScriptedSource(SerialSource):
+    """A source that yields a line then either raises or ends, to drive the pump's failure/EOF paths."""
+
+    def __init__(self, *, raise_after: bool) -> None:
+        self.port = "scripted://x"
+        self.baud = 115200
+        self._open = True
+        self._raise_after = raise_after
+
+    @property
+    def is_open(self) -> bool:
+        return self._open
+
+    async def open(self) -> None:
+        self._open = True
+
+    async def close(self) -> None:
+        self._open = False
+
+    async def write_line(self, line: str) -> None:
+        pass
+
+    async def lines(self) -> AsyncIterator[str]:
+        yield "[scripted] one line"
+        if self._raise_after:
+            raise SerialError("simulated read error")
+        # else: return → clean EOF (board closed)
 
 
 def test_status_starts_disconnected(client: TestClient) -> None:
@@ -192,6 +222,65 @@ async def test_mock_source_streams_until_stop() -> None:
     task.cancel()
     assert any("scanall" in line for line in received)
     assert any("mock" in line.lower() for line in received)
+
+
+def test_ws_rejects_a_disallowed_origin(client: TestClient) -> None:
+    # CORS doesn't cover WS upgrades, so /ws must reject a foreign Origin (a malicious web page) itself.
+    import contextlib
+
+    from starlette.websockets import WebSocketDisconnect
+
+    with contextlib.suppress(WebSocketDisconnect):  # server closes with 1008 before/at accept
+        with client.websocket_connect("/ws", headers={"Origin": "https://evil.example"}) as ws:
+            ws.receive_json()
+            raise AssertionError("connection with a disallowed Origin should have been rejected")
+
+
+def test_ws_allows_an_allowed_origin(client: TestClient) -> None:
+    with client.websocket_connect("/ws", headers={"Origin": "tauri://localhost"}) as ws:
+        assert ws.receive_json()["type"] == "status"
+
+
+def test_trustedhost_rejects_a_foreign_host(client: TestClient) -> None:
+    # DNS-rebinding defense: a request whose Host isn't a loopback name is rejected.
+    assert client.get("/api/status", headers={"Host": "evil.example"}).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_pump_tears_down_on_stream_error(tmp_path, monkeypatch) -> None:
+    # A read error in the pump must disconnect (release the port, finalize the session), not hang.
+    mgr = SerialManager(mock=False, port="x", baud=115200, store=SessionStore(tmp_path))
+    monkeypatch.setattr(mgr, "_make_source", lambda p, b: _ScriptedSource(raise_after=True))
+    await mgr.connect(None, None)
+    assert mgr.connected is True
+    for _ in range(50):
+        await asyncio.sleep(0.02)
+        if not mgr.connected:
+            break
+    assert mgr.connected is False  # pump error → teardown
+    sessions = SessionStore(tmp_path).list_sessions()
+    assert sessions and sessions[0]["ended"] is not None  # session finalized
+
+
+@pytest.mark.asyncio
+async def test_pump_tears_down_on_clean_eof(tmp_path, monkeypatch) -> None:
+    # The board closing the connection cleanly (lines() ends) must also disconnect, not silently stay "up".
+    mgr = SerialManager(mock=False, port="x", baud=115200, store=SessionStore(tmp_path))
+    monkeypatch.setattr(mgr, "_make_source", lambda p, b: _ScriptedSource(raise_after=False))
+    await mgr.connect(None, None)
+    for _ in range(50):
+        await asyncio.sleep(0.02)
+        if not mgr.connected:
+            break
+    assert mgr.connected is False
+
+
+def test_read_session_handles_corrupt_meta(tmp_path) -> None:
+    store = SessionStore(tmp_path)
+    sdir = tmp_path / "sessions"
+    sdir.mkdir(parents=True)
+    (sdir / "20200101T000000_1.json").write_text("{ this is not json", encoding="utf-8")
+    assert store.read_session("20200101T000000_1") is None  # corrupt meta → None, not a 500
 
 
 @pytest.mark.asyncio

@@ -26,6 +26,8 @@ import contextlib
 import json
 import logging
 import os
+import re
+import threading
 from collections import deque
 from pathlib import Path
 
@@ -34,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from assistant import ProposalStore
 from assistant_runner import ChatContext, KeyStore, build_client, run_chat
@@ -55,6 +58,23 @@ FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 STREAMING_PREFIXES = ("scan", "sniff", "wardrive", "blespam", "findmy", "remoteid", "pingscan",
                       "arpscan", "portscan", "csimotion", "foxhunt", "spoofat", "attack",
                       "packetcount", "mactrack", "evilportal", "karma", "gpsdata", "nmea")
+
+
+# Origins the webview/dev server legitimately call from. Shared by the HTTP CORS policy and the WebSocket
+# origin check (CORS does not apply to WebSocket upgrades, so /ws has to check Origin itself).
+_ALLOWED_ORIGINS = ("tauri://localhost", "http://tauri.localhost", "https://tauri.localhost")
+_ALLOWED_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
+# Host header values accepted (defends against DNS-rebinding, where a browser reaches the loopback port
+# via an attacker domain that resolves to 127.0.0.1). Port is stripped before matching by Starlette.
+_ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
+
+
+def _origin_allowed(origin: str | None) -> bool:
+    """True if a browser Origin is one of ours. A missing Origin (native client / test) is allowed —
+    a malicious *web page* always sends an Origin on a WebSocket, so this blocks the drive-by vector."""
+    if not origin:
+        return True
+    return origin in _ALLOWED_ORIGINS or bool(_ALLOWED_ORIGIN_RE.match(origin))
 
 
 class CommandBody(BaseModel):
@@ -95,9 +115,11 @@ class SerialManager:
         self._clients: set[WebSocket] = set()
         self._reader_task: asyncio.Task[None] | None = None
         self._history: deque[str] = deque(maxlen=300)  # replayed to late-joining websockets
+        self._hist_lock = threading.Lock()  # guards _history (read from a worker thread by the assistant)
         self._lock = asyncio.Lock()
         self._store = store  # records each connect→disconnect span to disk for later review
         self._recorder: SessionRecorder | None = None
+        self._fail_task: asyncio.Task[None] | None = None  # kept so a scheduled teardown isn't GC'd
 
     @property
     def connected(self) -> bool:
@@ -130,7 +152,11 @@ class SerialManager:
             self.running = False
             self._history.clear()
             if self._store is not None:
-                self._recorder = self._store.start(port=source.port, mock=self._mock)
+                try:
+                    self._recorder = self._store.start(port=source.port, mock=self._mock)
+                except OSError as exc:  # recording is best-effort; never block connecting on it
+                    logging.getLogger("marauder.bridge").warning("session recording off: %s", exc)
+                    self._recorder = None
             self._reader_task = asyncio.create_task(self._pump())
             await self.broadcast_status()
 
@@ -171,19 +197,38 @@ class SerialManager:
         await self.broadcast_status()
 
     async def _pump(self) -> None:
-        """Read lines from the source forever and push them to every websocket."""
+        """Read lines from the source and push them to every websocket until the stream ends or errors."""
         assert self.source is not None
         try:
             async for line in self.source.lines():
                 self._note_firmware(line)
-                self._history.append(line)
+                with self._hist_lock:
+                    self._history.append(line)
                 if self._recorder is not None:
                     self._recorder.log("line", line)
                 await self._broadcast({"type": "line", "data": line})
+        except asyncio.CancelledError:
+            raise  # an explicit disconnect cancelled us — let it propagate, do not teardown here
         except SerialError as exc:
-            await self._broadcast({"type": "line", "data": f"[bridge] {exc}"})
+            self._schedule_fail(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 - e.g. a session-log write failing must not kill the bridge
+            logging.getLogger("marauder.bridge").warning("serial pump error: %s", exc)
+            self._schedule_fail("lost the serial stream")
+            return
+        # The stream ended without error (clean EOF: the board closed / was unplugged cleanly).
+        self._schedule_fail("the board closed the connection")
+
+    def _schedule_fail(self, message: str) -> None:
+        """Broadcast an error line and tear down under the lock, off the pump task (so it is not the task
+        cancelling itself, and teardown is serialized with connect/disconnect)."""
+        self._fail_task = asyncio.create_task(self._fail(message))
+
+    async def _fail(self, message: str) -> None:
+        await self._broadcast({"type": "line", "data": f"[bridge] {message}"})
+        async with self._lock:
             await self._teardown()
-            await self.broadcast_status()
+        await self.broadcast_status()
 
     def _note_firmware(self, line: str) -> None:
         low = line.lower()
@@ -191,14 +236,20 @@ class SerialManager:
             self.firmware = line.split(":", 1)[-1].strip() or line.strip()
 
     def recent_lines(self, n: int = 50) -> list[str]:
-        """The last ``n`` console lines (read-only; used by the assistant's tail_console tool)."""
-        n = max(1, min(n, len(self._history)))
-        return list(self._history)[-n:]
+        """The last ``n`` console lines (read-only; the assistant's tail_console tool reads this from a
+        worker thread, so the snapshot is taken under the history lock)."""
+        with self._hist_lock:
+            history = list(self._history)
+        return history[-n:] if n > 0 else []
 
     async def add_client(self, ws: WebSocket) -> None:
         self._clients.add(ws)
+        # Snapshot history first (atomically, under the lock) so replaying it with awaits cannot race the
+        # pump appending mid-iteration.
+        with self._hist_lock:
+            history = list(self._history)
         await ws.send_text(json.dumps({"type": "status", "data": self.status()}))
-        for line in self._history:
+        for line in history:
             await ws.send_text(json.dumps({"type": "line", "data": line}))
 
     def remove_client(self, ws: WebSocket) -> None:
@@ -248,15 +299,14 @@ def create_app(
     # this does not widen network exposure.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "https://tauri.localhost",
-        ],
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_origins=list(_ALLOWED_ORIGINS),
+        allow_origin_regex=_ALLOWED_ORIGIN_RE.pattern,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Reject requests whose Host header isn't a loopback name — blocks DNS-rebinding, where a browser
+    # reaches this loopback port through an attacker-controlled domain pointed at 127.0.0.1.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
     @app.get("/api/status")
     async def get_status() -> dict:
@@ -268,7 +318,11 @@ def create_app(
         try:
             await manager.connect(body.port, body.baud)
         except SerialError as exc:
-            return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+            logging.getLogger("marauder.bridge").info("connect failed: %s", exc)
+            return JSONResponse(
+                {"ok": False, "error": "Could not open the serial port. Check the cable, port and access."},
+                status_code=502,
+            )
         return JSONResponse({"ok": True, "status": manager.status()})
 
     @app.post("/api/disconnect")
@@ -386,9 +440,14 @@ def create_app(
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
+        # CORS does not apply to WebSocket upgrades, so check the Origin ourselves: a malicious web page
+        # could otherwise open this socket and drive the board. A missing Origin (native client) is fine.
+        if not _origin_allowed(ws.headers.get("origin")):
+            await ws.close(code=1008)  # policy violation
+            return
         await ws.accept()
-        await manager.add_client(ws)
         try:
+            await manager.add_client(ws)
             while True:
                 # The UI mostly talks over HTTP, but allow a command over the socket too.
                 raw = await ws.receive_text()
@@ -424,6 +483,16 @@ def main(argv: list[str] | None = None) -> int:
 
     mock = args.mock or os.environ.get("MARAUDER_MOCK") == "1"
     import uvicorn
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        logging.getLogger("marauder.bridge").warning(
+            "Binding to %s exposes an UNAUTHENTICATED command API beyond this machine. The bridge has no "
+            "auth; anyone who can reach %s:%s can drive the board. Use 127.0.0.1 unless you understand "
+            "this.",
+            args.host,
+            args.host,
+            args.port,
+        )
 
     data_dir = Path(args.data_dir) if args.data_dir else None
     captures_dir = Path(args.captures_dir) if args.captures_dir else None

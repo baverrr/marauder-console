@@ -52,19 +52,30 @@ class SessionRecorder:
         self._meta = meta
         self._commands = 0
         self._lines = 0
+        # One append handle kept open for the session's lifetime — avoids an open+close per line on the
+        # pump's hot path. If it can't be opened, recording is simply off (connect still works).
+        try:
+            self._fh = self._events_path.open("a", encoding="utf-8")
+        except OSError:
+            self._fh = None
         self._write_meta()
 
     def _write_meta(self) -> None:
-        self._meta_path.write_text(json.dumps(self._meta), encoding="utf-8")
+        # Write to a temp file and atomically replace, so a crash mid-write can't leave a corrupt meta.json.
+        tmp = self._meta_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(self._meta), encoding="utf-8")
+        os.replace(tmp, self._meta_path)
 
     def log(self, kind: str, text: str) -> None:
-        """Append one recorded event. ``kind`` is "command" (sent) or "line" (received)."""
+        """Append one recorded event. ``kind`` is "command" (sent) or "line" (received). A write error
+        propagates — the caller (the pump) treats it as a stream failure and tears down."""
         if kind == "command":
             self._commands += 1
         else:
             self._lines += 1
-        with self._events_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"t": _now_iso(), "k": kind, "d": text}) + "\n")
+        if self._fh is not None:
+            self._fh.write(json.dumps({"t": _now_iso(), "k": kind, "d": text}) + "\n")
+            self._fh.flush()
 
     def finish(self) -> None:
         """Stamp the end time and final counts. A session with ``ended: null`` was never finished."""
@@ -72,6 +83,12 @@ class SessionRecorder:
         self._meta["commands"] = self._commands
         self._meta["lines"] = self._lines
         self._write_meta()
+        if self._fh is not None:
+            try:
+                self._fh.close()
+            except OSError:
+                pass
+            self._fh = None
 
 
 class SessionStore:
@@ -119,7 +136,10 @@ class SessionStore:
         meta_path: Path | None = next((p for p in self._dir.glob("*.json") if p.stem == session_id), None)
         if meta_path is None:
             return None
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None  # corrupt/half-written meta → treat as "no such session" (matches list_sessions)
         events: list[dict] = []
         events_path = meta_path.with_suffix(".ndjson")  # derived from the listed path, not from the id
         if events_path.is_file():
