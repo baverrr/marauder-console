@@ -120,7 +120,9 @@ class MockSerialSource(SerialSource):
     task alive that emits a line every so often until ``stopscan`` (or close) stops it.
     """
 
-    def __init__(self, port: str = "mock://marauder", baud: int = DEFAULT_BAUD, *, interval: float = 0.4) -> None:
+    def __init__(
+        self, port: str = "mock://marauder", baud: int = DEFAULT_BAUD, *, interval: float = 0.4
+    ) -> None:
         self.port = port
         self.baud = baud
         self._interval = interval
@@ -200,7 +202,7 @@ class MockSerialSource(SerialSource):
         while self._open and self._queue is not None:
             try:
                 line = await asyncio.wait_for(self._queue.get(), timeout=0.5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             yield line
 
