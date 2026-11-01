@@ -20,3 +20,12 @@ frontend/vite.config.d.ts
 
 # Editor / session state
 .claude/
+
+# Desktop (Tauri + PyInstaller sidecar) — reserved for Phase 1 onward
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+# PyInstaller bridge-sidecar build output (root-anchored; frontend/dist is handled above)
+/build/
+/dist/
+*.spec

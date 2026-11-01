@@ -72,6 +72,17 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   <img src="docs/images/control.jpg" alt="Control view: a tool card with an editable command field and Run button, and the live serial console streaming scan output at the bottom" width="800">
 </p>
 
+## Desktop app (in progress)
+
+A native **desktop build** is being added: a [Tauri](https://tauri.app/) window around this same UI, with
+the Python bridge bundled as a sidecar (no browser, no separate install), a **Claude-enabled assistant**
+that explains commands and *drafts* (never runs) them, and expanded tools — more of the Marauder command
+set plus PC-side analysis (PCAP viewer, wardrive map, SD capture library, session history). The web app
+above keeps working unchanged; the desktop build is additive.
+
+- Roadmap and phases: [`docs/DESKTOP_PLAN.md`](docs/DESKTOP_PLAN.md)
+- Run modes and layout: [`docs/desktop-dev.md`](docs/desktop-dev.md)
+
 ## Hardware & accessories
 
 The board is an ESP32‑WROOM (2.4 GHz only) with a built-in microSD slot and touchscreen. Two cheap add-ons
