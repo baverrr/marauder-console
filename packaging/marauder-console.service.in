@@ -4,8 +4,10 @@ Documentation=https://github.com/baverrr/marauder-console
 
 [Service]
 # The bridge opens the serial port only while the UI is "connected", so running it as a service does not
-# hold /dev/ttyUSB0 the rest of the time. -I isolates the interpreter from the invoking environment.
-ExecStart="@APP_DIR@/venv/bin/python" -I "@APP_DIR@/bridge.py" serve --host 127.0.0.1 --port 8200
+# hold /dev/ttyUSB0 the rest of the time. WorkingDirectory + -s (not -I) so bridge.py can import its
+# sibling serial_source while still ignoring user site-packages.
+WorkingDirectory=@APP_DIR@
+ExecStart="@APP_DIR@/venv/bin/python" -s "@APP_DIR@/bridge.py" serve --host 127.0.0.1 --port 8200
 Restart=on-failure
 RestartSec=5
 
