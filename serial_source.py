@@ -231,6 +231,31 @@ _STATIC_RESPONSES: dict[str, list[str]] = {
     "save": ["Saved to SD (mock)."],
     "load": ["Loaded from SD (mock)."],
     "join": ["Joining network (mock)... got placeholder IP 192.0.2.50"],
+    "channel": ["Current channel: 1 (mock)."],
+    "clearlist": ["List cleared (mock)."],
+    "settings": [
+        "Settings (mock):",
+        "  ForcePMKID: false",
+        "  SavePCAP: true",
+        "  (placeholder values — connect a real board for actual settings)",
+    ],
+    "reboot": ["Rebooting (mock)... reconnect when it comes back."],
+    "update": ["Update not available in mock mode."],
+    "ls": [
+        "/ (mock SD):",
+        "  SCANS/",
+        "  wardrive_0.log",
+        "  pmkid_0.pcap",
+    ],
+    "randapmac": ["AP MAC set to 00:00:5e:00:53:a1 (mock)."],
+    "randstamac": ["Station MAC set to 00:00:5e:00:53:b2 (mock)."],
+    "cloneapmac": ["AP MAC cloned from list (mock)."],
+    "clonestamac": ["Station MAC cloned from list (mock)."],
+    "gps": ["GPS (mock): no module attached; fields unavailable."],
+    "gpspoi": ["GPS POI saved (mock)."],
+    "gpstracker": ["GPS tracker command acknowledged (mock)."],
+    "geofence": ["Geofences (mock): none set."],
+    "recon": ["Recon mission (mock): idle."],
 }
 
 _STREAMING_VERBS = {
@@ -258,6 +283,12 @@ _STREAMING_VERBS = {
     "portscan",
     "csimotion",
     "foxhunt",
+    "packetcount",
+    "mactrack",
+    "evilportal",
+    "karma",
+    "gpsdata",
+    "nmea",
 }
 
 
@@ -266,12 +297,24 @@ def _fake_stream_line(command: str, n: int) -> str:
     mac = f"00:00:5e:00:53:{(n % 256):02x}"  # RFC 7042 documentation MAC range
     rssi = -40 - random.randint(0, 50)
     verb = command.split()[0].lower()
-    if verb.startswith("sniffbt") or verb in {"blespam", "findmy", "remoteid", "sniffskim"}:
+    if verb.startswith("sniffbt") or verb in {"blespam", "findmy", "remoteid", "sniffskim", "spoofat"}:
         return f"[{n:03d}] BLE device {mac}  RSSI {rssi}  name=Placeholder-{n}"
     if verb in {"pingscan", "arpscan"}:
         return f"[{n:03d}] host 192.0.2.{n % 254 + 1} is up (mock)"
     if verb == "portscan":
         return f"[{n:03d}] 192.0.2.10:{1000 + n} open (mock)"
+    if verb == "packetcount":
+        return f"[{n:03d}] ch {n % 13 + 1}: {random.randint(0, 200)} pkts (mock)"
+    if verb == "mactrack":
+        return f"[{n:03d}] target {mac}  RSSI {rssi}  (mock)"
+    if verb == "karma":
+        return f"[{n:03d}] probe for Placeholder-SSID from {mac} (mock)"
+    if verb == "evilportal":
+        return f"[{n:03d}] client {mac} -> GET / (mock portal)"
+    if verb == "gpsdata":
+        return f"[{n:03d}] fix=none sats=0 lat=0.000000 lon=0.000000 (no module, mock)"
+    if verb == "nmea":
+        return "$GPGGA,000000.00,,,,,0,00,99.99,,,,,,*00 (mock)"
     if verb.startswith("wardrive"):
         return f"[{n:03d}] AP {mac}  ch {n % 13 + 1}  RSSI {rssi}  GPS 0.0,0.0 (no fix, mock)"
     return f"[{n:03d}] AP/packet {mac}  ch {n % 13 + 1}  RSSI {rssi}  (mock)"
