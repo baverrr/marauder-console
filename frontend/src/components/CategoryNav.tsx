@@ -1,15 +1,16 @@
 import { type ComponentType, type ReactNode } from "react";
-import { BookOpen, SlidersHorizontal, HelpCircle, Microscope, History } from "lucide-react";
+import { BookOpen, SlidersHorizontal, HelpCircle, Microscope, History, FolderOpen } from "lucide-react";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
 import { CATEGORY_ICONS } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export type View = "reference" | "control" | "analysis";
 
-/** PC-side analysis views (Phase 3). More land in later slices (capture library, PCAP viewer, map). */
-export type AnalysisId = "history";
+/** PC-side analysis views (Phase 3). The wardrive map lands in a later slice. */
+export type AnalysisId = "history" | "captures";
 
 export const ANALYSIS_VIEWS: { id: AnalysisId; name: string; icon: ComponentType<{ className?: string }> }[] = [
+  { id: "captures", name: "Capture library", icon: FolderOpen },
   { id: "history", name: "Session history", icon: History },
 ];
 

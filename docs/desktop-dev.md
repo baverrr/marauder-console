@@ -82,5 +82,11 @@ the `bundle` object in `tauri.conf.json` so `tauri build` ships it.
     `<data-dir>/sessions/` (NDJSON transcript + JSON metadata) via `session_store.py`, served by
     `GET /api/sessions` and `/api/sessions/{id}`; the UI browses them offline. Data dir resolves from
     `MARAUDER_CONSOLE_DATA_DIR`, else the XDG data home.
-  - *Next slices:* capture/PCAP library, then the wardrive map.
+  - *Slice 2:* capture library + PCAP viewer — `capture_store.py` lists `.pcap`/CSV/log files in a
+    captures dir (`MARAUDER_CONSOLE_CAPTURES_DIR`, else `<data-dir>/captures`), and `pcap_reader.py` is a
+    dependency-free classic-pcap + radiotap + 802.11 parser that summarises a capture (frames, span,
+    SSIDs/BSSIDs). Served by `GET /api/captures` and `/api/captures/{name}/summary`; a requested name is
+    matched against the listing, never used to build the opened path. Scrubbed fixtures live in
+    `tests/fixtures/` (documentation MACs only).
+  - *Next slice:* the wardrive map.
 - Phase 4 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
