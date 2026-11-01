@@ -49,20 +49,18 @@ jobs:
       - name: Build the bridge sidecar
         run: bash scripts/build-sidecar.sh
 
-      # `npm --prefix frontend run tauri` runs with cwd=frontend/, so the --config path must be absolute
-      # (a relative path would be looked up under frontend/ and not found). The .deb is required; the
-      # AppImage bundler (downloads linuxdeploy, relocates webkit + the sidecar) is the fragile step, so
-      # it's best-effort and never loses the .deb.
+      # Invoke the tauri CLI directly from the repo root (cwd) — `npm --prefix frontend run tauri` would
+      # run it with cwd=frontend/, where the CLI can't locate the Tauri project (it panics in app_paths).
+      # The .deb is required; the AppImage bundler (downloads linuxdeploy, relocates webkit + the sidecar)
+      # is the fragile step, so it's best-effort and never loses the .deb.
       - name: Build the .deb bundle
-        run: >-
-          npm --prefix frontend run tauri -- build --bundles deb
-          --config "$GITHUB_WORKSPACE/src-tauri/tauri.bundle.conf.json"
+        run: frontend/node_modules/.bin/tauri build --bundles deb --config src-tauri/tauri.bundle.conf.json
 
       - name: Build the AppImage bundle (best-effort)
         continue-on-error: true
         run: >-
-          npm --prefix frontend run tauri -- build --bundles appimage
-          --config "$GITHUB_WORKSPACE/src-tauri/tauri.bundle.conf.json"
+          frontend/node_modules/.bin/tauri build --bundles appimage
+          --config src-tauri/tauri.bundle.conf.json
 
       - name: Package firmware + flasher (ships with the release)
         run: zip -r marauder-firmware-cyd.zip firmware scripts/flash-firmware.sh requirements-flash.txt
