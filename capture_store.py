@@ -83,8 +83,11 @@ class CaptureStore:
 
             try:
                 summary = summarize_pcap(path)
-            except (ValueError, OSError) as exc:
-                return {"kind": "error", "name": name, "error": str(exc)}
+            except ValueError:
+                # Fixed, non-exception-derived message (raw exception text is kept out of the response).
+                return {"kind": "error", "name": name, "error": "not a readable pcap file"}
+            except OSError:
+                return {"kind": "error", "name": name, "error": "could not read this file"}
             summary["name"] = name
             return summary
         return self._text_preview(path, name)
@@ -93,8 +96,8 @@ class CaptureStore:
         try:
             with path.open("r", encoding="utf-8", errors="replace") as fh:
                 blob = fh.read(_TEXT_PREVIEW_BYTES)
-        except OSError as exc:
-            return {"kind": "error", "name": name, "error": str(exc)}
+        except OSError:
+            return {"kind": "error", "name": name, "error": "could not read this file"}
         lines = blob.splitlines()
         truncated = len(lines) > _TEXT_PREVIEW_LINES
         return {
