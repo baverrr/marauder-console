@@ -1,13 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0b0f0c"/>
-  <g fill="none" stroke="#22c55e" stroke-width="14" stroke-linecap="round">
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a322e"/>
+      <stop offset="0.5" stop-color="#151a18"/>
+      <stop offset="1" stop-color="#0a0e0c"/>
+    </linearGradient>
+    <radialGradient id="sweep" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#22c55e" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#22c55e" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- smoked-glass tile to sit alongside the Manila-Folders / Slot-Dark app icons -->
+  <rect width="512" height="512" rx="112" fill="url(#glass)"/>
+  <rect x="5" y="5" width="502" height="502" rx="107" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="2"/>
+  <circle cx="256" cy="256" r="150" fill="url(#sweep)"/>
+  <g fill="none" stroke="#22c55e" stroke-width="12" stroke-linecap="round">
     <circle cx="256" cy="256" r="60"/>
-    <path d="M256 196a60 60 0 0 1 0 120" opacity="0.9"/>
-    <circle cx="256" cy="256" r="120" opacity="0.6"/>
-    <circle cx="256" cy="256" r="180" opacity="0.35"/>
+    <circle cx="256" cy="256" r="120" opacity="0.55"/>
+    <circle cx="256" cy="256" r="180" opacity="0.3"/>
+    <line x1="256" y1="256" x2="392" y2="150"/>
   </g>
-  <g stroke="#22c55e" stroke-width="14" stroke-linecap="round">
-    <line x1="256" y1="256" x2="396" y2="150"/>
-  </g>
-  <circle cx="256" cy="256" r="20" fill="#22c55e"/>
+  <circle cx="256" cy="256" r="18" fill="#22c55e"/>
 </svg>

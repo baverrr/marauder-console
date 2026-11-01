@@ -67,6 +67,21 @@ Packaging the sidecar (not needed for dev): `bash scripts/build-sidecar.sh` buil
 `src-tauri/binaries/marauder-bridge-<triple>`; then add `"externalBin": ["binaries/marauder-bridge"]` to
 the `bundle` object in `tauri.conf.json` so `tauri build` ships it.
 
+## Install as a desktop app (current machine)
+
+Until the Phase 5 AppImage/`.deb` bundle lands, `scripts/install-desktop.sh` installs the app for the
+current user: it builds the release binary, installs a launcher and a themed icon (named
+`marauder-console` under `hicolor`, so it follows the active icon theme), and on KDE Plasma pins it to the
+task manager. User-local, no sudo, re-runnable.
+
+```bash
+bash scripts/install-desktop.sh
+```
+
+The launcher runs the bridge from this repo's `./venv`, so keep the repo in place (re-run the script after
+moving it). The matching board firmware is **Phase 6** — see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md) — which
+will bundle the ESP32 Marauder firmware + flashing so the console and firmware ship together.
+
 ## Status
 
 - **Phase 0:** groundwork — layout, run-mode docs, reserved ignores, README pointer.
