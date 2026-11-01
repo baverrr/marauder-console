@@ -71,6 +71,42 @@ def test_attack_command_streams(client: TestClient) -> None:
     assert client.get("/api/status").json()["running"] is False
 
 
+@pytest.mark.parametrize("command", ["packetcount", "evilportal -c start", "mactrack", "gpsdata", "nmea"])
+def test_new_streaming_commands_set_and_clear_running(client: TestClient, command: str) -> None:
+    # Phase 2 added these to the Marauder command set; the bridge must treat them as streaming so the UI
+    # shows Stop and the mock streams canned lines instead of replying "Unknown command".
+    client.post("/api/connect")
+    client.post("/api/command", json={"command": command})
+    assert client.get("/api/status").json()["running"] is True
+    client.post("/api/stop")
+    assert client.get("/api/status").json()["running"] is False
+
+
+@pytest.mark.parametrize("command", ["channel", "settings", "ls /", "recon status"])
+def test_new_static_commands_respond(client: TestClient, command: str) -> None:
+    # New non-streaming commands get canned mock replies rather than "Unknown command", so offline dev and
+    # tests see plausible output.
+    client.post("/api/connect")
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()  # initial status
+        ws.send_json({"type": "command", "command": command})
+        saw_unknown = False
+        saw_reply = False
+        for _ in range(20):
+            msg = ws.receive_json()
+            if msg["type"] != "line":
+                continue
+            text = msg["data"]
+            if text.strip() == f"> {command}":
+                continue
+            if "Unknown command" in text:
+                saw_unknown = True
+                break
+            saw_reply = True
+            break
+        assert saw_reply and not saw_unknown
+
+
 def test_websocket_streams_status_and_lines(client: TestClient) -> None:
     client.post("/api/connect")
     with client.websocket_connect("/ws") as ws:

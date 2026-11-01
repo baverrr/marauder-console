@@ -73,4 +73,8 @@ the `bundle` object in `tauri.conf.json` so `tauri build` ships it.
 - **Phase 1 (this change):** Tauri v2 shell in `src-tauri/` that resolves/spawns the bridge, health-checks
   it, injects the bridge URL, and adds a tray menu (Connect/Disconnect/Stop/Open log/Show/Quit);
   bridge gains CORS for the webview origin; frontend targets the injected URL; PyInstaller sidecar script.
-- Phase 2 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
+- **Phase 2:** expanded the `tools.ts` command set to track the device's full serial CLI — admin
+  (channel/settings/reboot/update), MAC randomise/clone, evil portal, karma, SAE/CSA/rickroll beacon
+  variants, packet count, MAC track, and the GPS tools; corrected `spoofat` (a BLE device spoof, not a
+  Wi-Fi AP spoof); and extended the mock so the new streaming/static commands round-trip offline.
+- Phase 3 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).

@@ -50,6 +50,9 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
 
 - **Full annotated tool map** — Wi‑Fi recon, Wi‑Fi capture, Wi‑Fi active (transmit), Bluetooth/BLE,
   network probes and device/system commands, each with a high-level summary, how-to and exact syntax.
+  The catalogue tracks the device's own serial command set, including admin (channel, settings, reboot,
+  firmware update), MAC randomise/clone, and the GPS tools (`gpsdata`, `nmea`, `gpspoi`, `gpstracker`,
+  `geofence`).
 - **One source of truth** — [`tools.ts`](frontend/src/tools.ts) drives *both* the reference docs and the
   Run controls, so they can never drift apart.
 - **Live serial console** — streamed over a WebSocket, colour-coded, with autoscroll, a free-form command
@@ -63,7 +66,7 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
 - **Authorisation gating** — transmitting (`active`) tools are disabled until you acknowledge, once per
   session, that you're authorised to test the target.
 - **Hardware "Requires" badges** — tools that need an **SD card** (PCAP captures, `save`/`load`, wardrive
-  logs) or a **GPS** module (`wardrive`, `wardrivepoi`, `foxhunt` location) are flagged, with a built-in
+  logs) or a **GPS** module (`wardrive`, `wardrivepoi`, `foxhunt`, `gpsdata`/`nmea` location) are flagged, with a built-in
   **Hardware & setup** page.
 - **Mock mode** — a simulated board (`--mock`) lets you run and develop the whole app, streaming included,
   with no hardware.

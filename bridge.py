@@ -48,7 +48,8 @@ PORT = 8200  # the console's HTTP/WS port; separate from the TV remote's 8198/81
 FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 # Commands that keep streaming until stopscan; the bridge marks itself "running" while one is active.
 STREAMING_PREFIXES = ("scan", "sniff", "wardrive", "blespam", "findmy", "remoteid", "pingscan",
-                      "arpscan", "portscan", "csimotion", "foxhunt", "spoofat", "attack")
+                      "arpscan", "portscan", "csimotion", "foxhunt", "spoofat", "attack",
+                      "packetcount", "mactrack", "evilportal", "karma", "gpsdata", "nmea")
 
 
 class CommandBody(BaseModel):
