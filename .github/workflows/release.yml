@@ -26,7 +26,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Rust (stable) is preinstalled on ubuntu-latest runners — no third-party toolchain action needed.
+      - name: Rust toolchain
+        run: rustup show && cargo --version
 
       - name: System libraries (Tauri v2)
         run: |
@@ -63,9 +65,14 @@ jobs:
 
       - name: Attach to the GitHub release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist-artifacts/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        # Use the preinstalled gh CLI (no third-party release action). Create the release if it doesn't
+        # exist yet, otherwise just attach/replace the files.
+        run: |
+          gh release create "$TAG" dist-artifacts/* --title "$TAG" --notes "Automated desktop bundle." \
+            || gh release upload "$TAG" dist-artifacts/* --clobber
 
       - name: Upload as a workflow artifact
         uses: actions/upload-artifact@v4
