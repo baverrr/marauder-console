@@ -20,7 +20,9 @@ bash "$REPO/scripts/build-sidecar.sh"
 echo "==> Building the Tauri bundle (AppImage + .deb)"
 # The externalBin that bundles the sidecar lives in an overlay config, merged in only for packaging, so a
 # plain `cargo build` / `tauri dev` still works without a prebuilt sidecar binary present.
-npm --prefix "$REPO/frontend" run tauri -- build --config "$REPO/src-tauri/tauri.bundle.conf.json"
+# Run the tauri CLI from the repo root (we cd'd to $REPO above). Invoking it via
+# `npm --prefix frontend run tauri` would set cwd=frontend/, where the CLI can't find the project.
+"$REPO/frontend/node_modules/.bin/tauri" build --config "$REPO/src-tauri/tauri.bundle.conf.json"
 
 echo
 echo "Done. Artifacts:"
