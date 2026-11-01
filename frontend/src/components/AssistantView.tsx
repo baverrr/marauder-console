@@ -29,12 +29,13 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   connected: boolean;
+  boardBusy: boolean;
   authorized: boolean;
   onAuthorize: () => void;
   onSend: (command: string) => void;
 }
 
-export function AssistantView({ connected, authorized, onAuthorize, onSend }: Props) {
+export function AssistantView({ connected, boardBusy, authorized, onAuthorize, onSend }: Props) {
   const [hasKey, setHasKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -253,8 +254,14 @@ export function AssistantView({ connected, authorized, onAuthorize, onSend }: Pr
                         <Button
                           size="sm"
                           onClick={() => onSend(p.command)}
-                          disabled={!connected}
-                          title={connected ? "Run on the board" : "Connect a board first"}
+                          disabled={!connected || boardBusy}
+                          title={
+                            !connected
+                              ? "Connect a board first"
+                              : boardBusy
+                                ? "A scan is running — Stop it first"
+                                : "Run on the board"
+                          }
                         >
                           <SendHorizonal /> Send
                         </Button>
