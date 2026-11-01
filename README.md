@@ -197,8 +197,17 @@ marauder-console/
 | Reference offline | The tool map is static data compiled into the frontend, so the docs render with the bridge disconnected (or no board at all). |
 | Mock board | `serial_source.MockSerialSource` fakes Marauder's `help`/`info` and streams generic placeholder lines for scan/sniff commands until `stopscan`. |
 
+## License & legal
+
+- **License:** MIT — see [LICENSE](LICENSE). You may use, modify and redistribute the code under those terms.
+- **Terms and Conditions:** [TERMS.md](TERMS.md) — how you may operate the app, the **authorised-use** and
+  legal-compliance requirements for a transmitting security tool, no-warranty and liability terms.
+- **Privacy Policy:** [PRIVACY.md](PRIVACY.md) — the app runs entirely on your own computer, collects
+  nothing, and sends nothing to the author.
+
 ## Notes & disclaimer
 
 - All example output, addresses and identifiers in the mock and the docs are **documentation placeholders**
   (RFC 5737 IPs like `192.0.2.x`, RFC 7042 MACs like `00:00:5e:00:53:xx`).
-- Provided as-is, for authorised security testing and education. You are responsible for how you use it.
+- Provided **as is**, for authorised security testing and education. You are responsible for how you use it;
+  see the [Terms and Conditions](TERMS.md).
