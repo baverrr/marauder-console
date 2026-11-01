@@ -65,10 +65,12 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
 - **Wardrive map (PC-side)** — plots the located access points from a Wigle wardrive CSV on an offline,
   self-contained point map (coloured by signal strength, with per-point details). No map tiles are
   fetched, so your route is never sent anywhere; rows without a GPS fix are skipped.
-- **Claude assistant — advise & draft only** — under the **Assistant** tab, a staging area for commands
-  the assistant *proposes*. It never runs them: you review each one (with a **transmits** flag on anything
-  that emits RF) and run it yourself through the normal authorisation. The live chat and API-key settings
-  land in a following slice.
+- **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
+  commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
+  commands into a staging area; it never runs them — you review each one (with a **transmits** flag on
+  anything that emits RF) and run it yourself through the normal authorisation. The assistant has no tool
+  that can execute or transmit. Your Anthropic API key is stored in the OS keychain (set it in the tab),
+  never in the repo or a log.
 - **Safe streaming** — scans and sniffs (`scanall`, `sniff*`, `wardrive`, …) run until stopped; the UI
   tracks which command is running and shows Stop. It also surfaces "board busy" because the device's
   touchscreen and serial share state.
