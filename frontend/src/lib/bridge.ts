@@ -20,6 +20,11 @@ const BASE = ((): string => {
   return "";
 })();
 
+/** Absolute URL for a bridge HTTP path, honouring the injected base (same-origin in the browser build). */
+export function apiUrl(path: string): string {
+  return `${BASE}${path}`;
+}
+
 /** Build the WebSocket URL for `path`, honouring the injected bridge base or falling back to the page. */
 function wsUrl(path: string): string {
   if (BASE) {

@@ -17,8 +17,9 @@ from serial_source import MockSerialSource, SerialError
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    app = create_app(mock=True)
+def client(tmp_path) -> Iterator[TestClient]:
+    # Isolate each test's session files in a temp data dir instead of the user's real app-data location.
+    app = create_app(mock=True, data_dir=tmp_path)
     with TestClient(app) as c:
         yield c
 
@@ -138,6 +139,37 @@ def test_websocket_command_is_echoed(client: TestClient) -> None:
             if echoed and info:
                 break
         assert echoed and info
+
+
+def test_sessions_empty_before_any_connect(client: TestClient) -> None:
+    assert client.get("/api/sessions").json()["sessions"] == []
+
+
+def test_session_recorded_across_connect_and_disconnect(client: TestClient) -> None:
+    # A connect→commands→disconnect span is persisted: metadata is listed and the transcript holds the
+    # commands that were sent. (Received lines are recorded too, but arrive via the async pump, so the
+    # deterministic assertion here is on the commands.)
+    client.post("/api/connect")
+    client.post("/api/command", json={"command": "scanall"})
+    client.post("/api/stop")
+    client.post("/api/disconnect")
+
+    sessions = client.get("/api/sessions").json()["sessions"]
+    assert len(sessions) == 1
+    meta = sessions[0]
+    assert meta["ended"] is not None  # finished on disconnect
+    assert meta["commands"] >= 2  # scanall + stopscan
+
+    detail = client.get(f"/api/sessions/{meta['id']}").json()
+    commands = [e["d"] for e in detail["events"] if e["k"] == "command"]
+    assert "scanall" in commands
+    assert "stopscan" in commands
+
+
+def test_session_unknown_id_is_404(client: TestClient) -> None:
+    # Also covers the path-traversal guard: a non-conforming id never resolves to a file.
+    assert client.get("/api/sessions/20200101T000000_0").status_code == 404
+    assert client.get("/api/sessions/..%2f..%2fetc%2fpasswd").status_code == 404
 
 
 @pytest.mark.asyncio

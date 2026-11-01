@@ -42,6 +42,7 @@ from serial_source import (
     SerialError,
     SerialSource,
 )
+from session_store import SessionRecorder, SessionStore, resolve_data_dir
 
 HOST = "127.0.0.1"
 PORT = 8200  # the console's HTTP/WS port; separate from the TV remote's 8198/8199
@@ -64,7 +65,7 @@ class ConnectBody(BaseModel):
 class SerialManager:
     """Owns at most one serial source and fans its output out to every connected websocket."""
 
-    def __init__(self, *, mock: bool, port: str, baud: int) -> None:
+    def __init__(self, *, mock: bool, port: str, baud: int, store: SessionStore | None = None) -> None:
         self._mock = mock
         self._default_port = port
         self._default_baud = baud
@@ -75,6 +76,8 @@ class SerialManager:
         self._reader_task: asyncio.Task[None] | None = None
         self._history: deque[str] = deque(maxlen=300)  # replayed to late-joining websockets
         self._lock = asyncio.Lock()
+        self._store = store  # records each connect→disconnect span to disk for later review
+        self._recorder: SessionRecorder | None = None
 
     @property
     def connected(self) -> bool:
@@ -106,6 +109,8 @@ class SerialManager:
             self.source = source
             self.running = False
             self._history.clear()
+            if self._store is not None:
+                self._recorder = self._store.start(port=source.port, mock=self._mock)
             self._reader_task = asyncio.create_task(self._pump())
             await self.broadcast_status()
 
@@ -122,6 +127,9 @@ class SerialManager:
                 await task
         if self.source is not None:
             await self.source.close()
+        if self._recorder is not None:
+            self._recorder.finish()
+            self._recorder = None
         self.source = None
         self.running = False
         self.firmware = None
@@ -133,6 +141,8 @@ class SerialManager:
         if self.source is None or not self.source.is_open:
             raise SerialError("Not connected to a board")
         await self.source.write_line(command)
+        if self._recorder is not None:
+            self._recorder.log("command", command)
         verb = command.split()[0].lower()
         if verb == "stopscan":
             self.running = False
@@ -147,6 +157,8 @@ class SerialManager:
             async for line in self.source.lines():
                 self._note_firmware(line)
                 self._history.append(line)
+                if self._recorder is not None:
+                    self._recorder.log("line", line)
                 await self._broadcast({"type": "line", "data": line})
         except SerialError as exc:
             await self._broadcast({"type": "line", "data": f"[bridge] {exc}"})
@@ -182,8 +194,15 @@ class SerialManager:
             self._clients.discard(ws)
 
 
-def create_app(*, mock: bool = False, port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> FastAPI:
-    manager = SerialManager(mock=mock, port=port, baud=baud)
+def create_app(
+    *,
+    mock: bool = False,
+    port: str = DEFAULT_PORT,
+    baud: int = DEFAULT_BAUD,
+    data_dir: Path | None = None,
+) -> FastAPI:
+    store = SessionStore(data_dir or resolve_data_dir())
+    manager = SerialManager(mock=mock, port=port, baud=baud, store=store)
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -243,6 +262,18 @@ def create_app(*, mock: bool = False, port: str = DEFAULT_PORT, baud: int = DEFA
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
         return JSONResponse({"ok": True, "status": manager.status()})
 
+    @app.get("/api/sessions")
+    async def list_sessions() -> dict:
+        # Read-only; works with the board unplugged. Transcripts are read from disk, not the device.
+        return {"sessions": store.list_sessions()}
+
+    @app.get("/api/sessions/{session_id}")
+    async def get_session(session_id: str) -> JSONResponse:
+        data = store.read_session(session_id)
+        if data is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(data)
+
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
@@ -277,12 +308,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--serial-port", default=DEFAULT_PORT, help="default ESP32 serial device")
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD)
     parser.add_argument("--mock", action="store_true", help="simulate a board; no hardware needed")
+    parser.add_argument("--data-dir", default=None, help="where to store session transcripts")
     args = parser.parse_args(argv)
 
     mock = args.mock or os.environ.get("MARAUDER_MOCK") == "1"
     import uvicorn
 
-    app = create_app(mock=mock, port=args.serial_port, baud=args.baud)
+    data_dir = Path(args.data_dir) if args.data_dir else None
+    app = create_app(mock=mock, port=args.serial_port, baud=args.baud, data_dir=data_dir)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
 

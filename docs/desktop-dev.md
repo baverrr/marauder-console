@@ -77,4 +77,10 @@ the `bundle` object in `tauri.conf.json` so `tauri build` ships it.
   (channel/settings/reboot/update), MAC randomise/clone, evil portal, karma, SAE/CSA/rickroll beacon
   variants, packet count, MAC track, and the GPS tools; corrected `spoofat` (a BLE device spoof, not a
   Wi-Fi AP spoof); and extended the mock so the new streaming/static commands round-trip offline.
-- Phase 3 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
+- **Phase 3 (in progress, delivered in slices):** PC-side analysis under a new **Analysis** tab.
+  - *Slice 1 (this change):* session history — the bridge records each connect→disconnect span to
+    `<data-dir>/sessions/` (NDJSON transcript + JSON metadata) via `session_store.py`, served by
+    `GET /api/sessions` and `/api/sessions/{id}`; the UI browses them offline. Data dir resolves from
+    `MARAUDER_CONSOLE_DATA_DIR`, else the XDG data home.
+  - *Next slices:* capture/PCAP library, then the wardrive map.
+- Phase 4 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).

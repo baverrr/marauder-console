@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
-import { CategoryNav, type View } from "@/components/CategoryNav";
+import { CategoryNav, type View, type AnalysisId } from "@/components/CategoryNav";
 import { ToolCard } from "@/components/ToolCard";
 import { SerialConsole } from "@/components/SerialConsole";
 import { HardwarePanel } from "@/components/HardwarePanel";
+import { HistoryView } from "@/components/HistoryView";
 import { useBridge } from "@/lib/bridge";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
 
@@ -14,6 +15,7 @@ export default function App() {
   const bridge = useBridge();
   const [view, setView] = useState<View>("reference");
   const [selected, setSelected] = useState<Selection>("wifi-recon");
+  const [analysisSel, setAnalysisSel] = useState<AnalysisId>("history");
   const [authorized, setAuthorized] = useState(false); // per-session ack for active (transmitting) tools
   const [runningToolId, setRunningToolId] = useState<string | null>(null);
 
@@ -50,7 +52,14 @@ export default function App() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <CategoryNav view={view} onView={setView} active={selected} onSelect={setSelected} />
+        <CategoryNav
+          view={view}
+          onView={setView}
+          active={selected}
+          onSelect={setSelected}
+          analysisActive={analysisSel}
+          onAnalysisSelect={setAnalysisSel}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="flex-1 overflow-auto p-5">
@@ -61,7 +70,11 @@ export default function App() {
               </div>
             )}
 
-            {selected === "hardware" ? (
+            {view === "analysis" ? (
+              analysisSel === "history" ? (
+                <HistoryView />
+              ) : null
+            ) : selected === "hardware" ? (
               <HardwarePanel />
             ) : (
               <>
