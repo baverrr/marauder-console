@@ -3,7 +3,11 @@
 # frontend, a `marauder-console` launcher, and (with --service) a systemd --user service that keeps the
 # bridge running. Run it from the checkout, wherever it lives; run it again after moving the checkout or
 # pulling new code.
-#   ./install.sh [--service] [--skip-frontend]
+#   ./install.sh [--service] [--skip-frontend] [--desktop]
+#
+# With --desktop it also builds and installs the native desktop app (Tauri window + bundled bridge) and,
+# on KDE Plasma, pins it to the taskbar, via scripts/install-desktop.sh. That needs the Tauri toolchain
+# (scripts/setup-tauri-toolchain.sh) and the Tauri CLI (npm --prefix frontend install).
 set -eu
 
 APP_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -11,11 +15,13 @@ BIN_DIR="$HOME/.local/bin"
 UNITS="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 SERVICE=no
 BUILD_FRONTEND=yes
+DESKTOP=no
 for arg in "$@"; do
     case "$arg" in
         --service) SERVICE=yes ;;
         --skip-frontend) BUILD_FRONTEND=no ;;
-        *) echo "usage: $0 [--service] [--skip-frontend]" >&2; exit 2 ;;
+        --desktop) DESKTOP=yes ;;
+        *) echo "usage: $0 [--service] [--skip-frontend] [--desktop]" >&2; exit 2 ;;
     esac
 done
 
@@ -57,6 +63,11 @@ if [ "$SERVICE" = yes ]; then
     systemctl --user daemon-reload
     systemctl --user enable --now marauder-console.service
     systemctl --user restart marauder-console.service  # pick up a moved checkout or new build
+fi
+
+if [ "$DESKTOP" = yes ]; then
+    echo "desktop: building the native app + launcher (scripts/install-desktop.sh)"
+    bash "$APP_DIR/scripts/install-desktop.sh"
 fi
 
 # The bridge needs read/write on the serial device. On most distros that means the 'dialout' group.

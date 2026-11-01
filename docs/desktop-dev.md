@@ -123,4 +123,10 @@ will bundle the ESP32 Marauder firmware + flashing so the console and firmware s
     `list_tools` is passed in from the UI (`tools.ts`), so the backend doesn't duplicate it. The runtime
     is the Anthropic SDK tool-runner rather than the Agent SDK — lighter to bundle in the sidecar and
     gives tighter control over the tool surface. Tests pin the no-execute invariant with a fake client.
-- Phase 5: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
+- **Phase 5 (in progress):** packaging. `scripts/build-sidecar.sh` freezes the bridge (with the new
+  `anthropic`/`keyring` deps) into a one-file sidecar; `scripts/build-bundle.sh` builds the AppImage +
+  `.deb` via `tauri build --config src-tauri/tauri.bundle.conf.json` (the overlay carries `externalBin`
+  so a plain `cargo build`/`tauri dev` still works without a prebuilt sidecar). `.github/workflows/release.yml`
+  does this on a `v*` tag and attaches the AppImage, `.deb` and a firmware+flasher zip to the release.
+  `./install.sh --desktop` wires the same desktop install for the current user.
+  Remaining in Phase 5: README screenshots of the Claude panel + the architecture-diagram refresh.
