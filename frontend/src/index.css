@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark, terminal-inspired palette: near-black slate background, phosphor-green primary for the live
+   control surfaces, amber for the authorised-use / active-attack warnings. Light tokens are provided too
+   but the app ships dark (class on <html>), which suits an RF/security tool and the device's own screen. */
+@layer base {
+  :root {
+    --background: 222 24% 7%;
+    --foreground: 210 20% 92%;
+    --card: 222 22% 10%;
+    --card-foreground: 210 20% 92%;
+    --primary: 150 72% 45%;
+    --primary-foreground: 150 40% 8%;
+    --secondary: 220 16% 18%;
+    --secondary-foreground: 210 20% 90%;
+    --muted: 220 16% 15%;
+    --muted-foreground: 215 14% 60%;
+    --accent: 190 80% 45%;
+    --accent-foreground: 190 40% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --warn: 38 92% 55%;
+    --warn-foreground: 38 60% 10%;
+    --border: 220 16% 20%;
+    --input: 220 16% 22%;
+    --ring: 150 72% 45%;
+    --radius: 0.65rem;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Subtle grid texture on the page background. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 28px 28px;
+    opacity: 0.25;
+    z-index: 0;
+  }
+}
+
+/* Thin, themed scrollbars for the console and panels. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

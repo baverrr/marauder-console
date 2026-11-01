@@ -1,0 +1,17 @@
+#!/bin/sh
+# Launcher for Marauder Console: starts the bridge (if it isn't already up) and opens the UI in a browser.
+# Installed to ~/.local/bin/marauder-console by install.sh. Pass --mock to run against a simulated board.
+set -eu
+APP_DIR="@APP_DIR@"
+URL="http://127.0.0.1:8200"
+
+if ! curl -fsS "$URL/api/status" >/dev/null 2>&1; then
+    "$APP_DIR/venv/bin/python" -I "$APP_DIR/bridge.py" serve "$@" &
+    # Wait briefly for it to come up.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        curl -fsS "$URL/api/status" >/dev/null 2>&1 && break
+        sleep 0.3
+    done
+fi
+
+command -v xdg-open >/dev/null 2>&1 && xdg-open "$URL" >/dev/null 2>&1 || echo "Open $URL in your browser."

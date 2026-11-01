@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" font-family="ui-sans-serif, system-ui, sans-serif">
+  <rect width="860" height="300" rx="12" fill="#0c1016"/>
+  <text x="430" y="34" text-anchor="middle" fill="#e6eaf0" font-size="17" font-weight="600">Marauder Console — architecture</text>
+
+  <!-- Browser -->
+  <g>
+    <rect x="30" y="80" width="200" height="120" rx="10" fill="#141a22" stroke="#2a3340"/>
+    <text x="130" y="108" text-anchor="middle" fill="#23c87f" font-size="14" font-weight="600">Browser SPA</text>
+    <text x="130" y="130" text-anchor="middle" fill="#9aa6b2" font-size="11">React + Tailwind</text>
+    <text x="130" y="150" text-anchor="middle" fill="#9aa6b2" font-size="11">Reference view (offline)</text>
+    <text x="130" y="168" text-anchor="middle" fill="#9aa6b2" font-size="11">Control panel + console</text>
+    <text x="130" y="186" text-anchor="middle" fill="#9aa6b2" font-size="11">driven by tools.ts</text>
+  </g>
+
+  <!-- Bridge -->
+  <g>
+    <rect x="330" y="80" width="200" height="120" rx="10" fill="#141a22" stroke="#2a3340"/>
+    <text x="430" y="108" text-anchor="middle" fill="#23c87f" font-size="14" font-weight="600">Python bridge</text>
+    <text x="430" y="130" text-anchor="middle" fill="#9aa6b2" font-size="11">FastAPI + uvicorn</text>
+    <text x="430" y="150" text-anchor="middle" fill="#9aa6b2" font-size="11">owns the serial port</text>
+    <text x="430" y="168" text-anchor="middle" fill="#9aa6b2" font-size="11">opens on connect,</text>
+    <text x="430" y="186" text-anchor="middle" fill="#9aa6b2" font-size="11">releases on disconnect</text>
+  </g>
+
+  <!-- Board -->
+  <g>
+    <rect x="630" y="80" width="200" height="120" rx="10" fill="#141a22" stroke="#2a3340"/>
+    <text x="730" y="108" text-anchor="middle" fill="#2bb6d6" font-size="14" font-weight="600">ESP32 Marauder</text>
+    <text x="730" y="130" text-anchor="middle" fill="#9aa6b2" font-size="11">Cheap Yellow Display</text>
+    <text x="730" y="150" text-anchor="middle" fill="#9aa6b2" font-size="11">2.4 GHz Wi-Fi + BLE</text>
+    <text x="730" y="168" text-anchor="middle" fill="#9aa6b2" font-size="11">touchscreen + CLI</text>
+    <text x="730" y="186" text-anchor="middle" fill="#9aa6b2" font-size="11">does all radio work</text>
+  </g>
+
+  <!-- Arrows -->
+  <g stroke="#23c87f" stroke-width="2" fill="none">
+    <path d="M232 128 L326 128" marker-end="url(#a)"/>
+    <path d="M326 152 L232 152" marker-end="url(#a)"/>
+  </g>
+  <g stroke="#2bb6d6" stroke-width="2" fill="none">
+    <path d="M532 128 L626 128" marker-end="url(#b)"/>
+    <path d="M626 152 L532 152" marker-end="url(#b)"/>
+  </g>
+
+  <text x="279" y="120" text-anchor="middle" fill="#23c87f" font-size="10">HTTP</text>
+  <text x="279" y="168" text-anchor="middle" fill="#23c87f" font-size="10">WebSocket</text>
+  <text x="579" y="120" text-anchor="middle" fill="#2bb6d6" font-size="10">USB serial</text>
+  <text x="579" y="168" text-anchor="middle" fill="#2bb6d6" font-size="10">115200 baud</text>
+
+  <!-- Offline note -->
+  <rect x="30" y="232" width="500" height="40" rx="8" fill="#1a1f12" stroke="#3d4a1f"/>
+  <text x="46" y="250" fill="#e0b341" font-size="11" font-weight="600">Reference layer needs no board</text>
+  <text x="46" y="266" fill="#9aa6b2" font-size="11">The tool map and docs render from tools.ts; live control needs the ESP32 connected.</text>
+
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#23c87f"/></marker>
+    <marker id="b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#2bb6d6"/></marker>
+  </defs>
+</svg>

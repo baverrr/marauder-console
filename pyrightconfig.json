@@ -1,0 +1,6 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "include": ["bridge.py", "serial_source.py", "test_bridge.py"],
+  "reportMissingImports": "warning"
+}
