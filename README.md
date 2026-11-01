@@ -95,8 +95,18 @@ that explains commands and *drafts* (never runs) them, and expanded tools — mo
 set plus PC-side analysis (PCAP viewer, wardrive map, SD capture library, session history). The web app
 above keeps working unchanged; the desktop build is additive.
 
+Install it for your user (builds the release binary, adds a launcher + themed icon, and on KDE Plasma pins
+it to the taskbar):
+
+```bash
+bash scripts/install-desktop.sh
+```
+
 - Roadmap and phases: [`docs/DESKTOP_PLAN.md`](docs/DESKTOP_PLAN.md)
 - Run modes and layout: [`docs/desktop-dev.md`](docs/desktop-dev.md)
+
+A later phase bundles the matching ESP32 Marauder firmware + flashing so the console and firmware ship
+together (see the roadmap).
 
 ## Hardware & accessories
 

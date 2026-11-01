@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Marauder Console
+GenericName=ESP32 Marauder control panel
+Comment=Control panel, command reference and PC-side analysis for an ESP32 Marauder board
+Exec=@EXEC@
+Icon=marauder-console
+Terminal=false
+Categories=Network;
+Keywords=marauder;esp32;wifi;bluetooth;
+StartupNotify=true
+StartupWMClass=marauder-console

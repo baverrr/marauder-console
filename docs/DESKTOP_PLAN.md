@@ -111,6 +111,29 @@ draft queue — it has no direct serial access.
   categories, analysis views, and architecture diagram refresh (`docs/architecture.svg`).
 - `install.sh` gains a desktop-build path alongside the existing web/service install.
 
+### Phase 6 — Bundled Marauder firmware & flashing (branch `desktop/phase-6-firmware`)
+Rationale: the console and the board's firmware are almost always used together, so ship them together —
+a user should be able to flash a known-good, matching firmware from the same app that drives it.
+- **Vendor the upstream firmware, pinned and attributed.** Add a `firmware/` area holding the prebuilt
+  ESP32 Marauder release `.bin` for this board's target (Cheap Yellow Display / ESP32-2432S028), the
+  upstream flashing docs, and a small `VERSION`/manifest recording the exact upstream tag and commit.
+  Pull it in as either a git submodule pinned to a release tag or a vendored copy under that tag.
+  - **Licensing is a gate, not an afterthought:** confirm the upstream license permits redistribution,
+    include upstream's `LICENSE`/`NOTICE` unmodified next to the binaries, redistribute the firmware
+    unmodified, and keep the existing "independent, unaffiliated" credit. If the license disallows
+    bundling the binary, fall back to a fetch-at-install step that downloads the pinned release instead
+    of committing it. Large binaries may want Git LFS or a release-time fetch rather than living in the
+    tree.
+- **Flashing helper.** A guided "Flash firmware" action (script first, UI later) that runs `esptool`
+  against the chosen serial port with the bundled `.bin`. It must honour the serial-port ownership
+  invariant — the bridge disconnects / releases the port before flashing, and nothing flashes while a
+  session is connected. Flashing is an explicit, confirmed action, never automatic.
+- **Package together.** The Phase 5 bundle includes the firmware payload (or the fetch manifest) so the
+  installed app can offer the matching firmware out of the box; document the board target and how to pick
+  the right `.bin` for other boards.
+- **Acceptance:** from a clean machine, a documented, reproducible path puts the matching firmware on the
+  board using only what ships with the app, with upstream license and attribution intact.
+
 ---
 
 ## 4. Safety & authorization model (unchanged intent, extended)
