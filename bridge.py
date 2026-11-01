@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from capture_store import CaptureStore, resolve_captures_dir
 from serial_source import (
     DEFAULT_BAUD,
     DEFAULT_PORT,
@@ -200,8 +201,11 @@ def create_app(
     port: str = DEFAULT_PORT,
     baud: int = DEFAULT_BAUD,
     data_dir: Path | None = None,
+    captures_dir: Path | None = None,
 ) -> FastAPI:
-    store = SessionStore(data_dir or resolve_data_dir())
+    base_dir = data_dir or resolve_data_dir()
+    store = SessionStore(base_dir)
+    captures = CaptureStore(captures_dir or resolve_captures_dir(base_dir))
     manager = SerialManager(mock=mock, port=port, baud=baud, store=store)
 
     @contextlib.asynccontextmanager
@@ -274,6 +278,18 @@ def create_app(
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
 
+    @app.get("/api/captures")
+    async def list_captures() -> dict:
+        # Read-only PC-side library; lists files copied into the captures dir. No device needed.
+        return {"captures": captures.list_captures()}
+
+    @app.get("/api/captures/{name}/summary")
+    async def capture_summary(name: str) -> JSONResponse:
+        data = captures.summarize(name)
+        if data is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(data)
+
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
@@ -309,13 +325,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD)
     parser.add_argument("--mock", action="store_true", help="simulate a board; no hardware needed")
     parser.add_argument("--data-dir", default=None, help="where to store session transcripts")
+    parser.add_argument("--captures-dir", default=None, help="folder of capture/log files to browse")
     args = parser.parse_args(argv)
 
     mock = args.mock or os.environ.get("MARAUDER_MOCK") == "1"
     import uvicorn
 
     data_dir = Path(args.data_dir) if args.data_dir else None
-    app = create_app(mock=mock, port=args.serial_port, baud=args.baud, data_dir=data_dir)
+    captures_dir = Path(args.captures_dir) if args.captures_dir else None
+    app = create_app(
+        mock=mock, port=args.serial_port, baud=args.baud, data_dir=data_dir, captures_dir=captures_dir
+    )
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
 
