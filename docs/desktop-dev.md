@@ -88,5 +88,8 @@ the `bundle` object in `tauri.conf.json` so `tauri build` ships it.
     SSIDs/BSSIDs). Served by `GET /api/captures` and `/api/captures/{name}/summary`; a requested name is
     matched against the listing, never used to build the opened path. Scrubbed fixtures live in
     `tests/fixtures/` (documentation MACs only).
-  - *Next slice:* the wardrive map.
+  - *Slice 3:* wardrive map — `wigle_reader.py` parses a Wigle wardrive CSV into located points (rows
+    with no GPS fix dropped), served by `GET /api/captures/{name}/wardrive`; `WardriveMapView` plots them
+    as a dependency-free, fully-offline SVG point map (no external tiles, so the route is never sent off
+    the machine). This completes the Phase 3 analysis tools.
 - Phase 4 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).

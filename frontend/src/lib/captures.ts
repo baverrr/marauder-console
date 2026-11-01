@@ -55,3 +55,28 @@ export async function getCaptureSummary(name: string): Promise<CaptureSummary> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as CaptureSummary;
 }
+
+export interface WardrivePoint {
+  mac: string;
+  ssid: string;
+  auth: string;
+  channel: string;
+  rssi: number | null;
+  lat: number;
+  lon: number;
+}
+
+export interface WardriveData {
+  kind: "wardrive";
+  name: string;
+  points: WardrivePoint[];
+  count: number;
+  bounds: { min_lat: number; max_lat: number; min_lon: number; max_lon: number } | null;
+  truncated: boolean;
+}
+
+export async function getWardrive(name: string): Promise<WardriveData> {
+  const res = await fetch(apiUrl(`/api/captures/${encodeURIComponent(name)}/wardrive`));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as WardriveData;
+}
