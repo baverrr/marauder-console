@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from assistant import ProposalStore
 from capture_store import CaptureStore, resolve_captures_dir
 from serial_source import (
     DEFAULT_BAUD,
@@ -61,6 +62,11 @@ class CommandBody(BaseModel):
 class ConnectBody(BaseModel):
     port: str | None = None
     baud: int | None = None
+
+
+class ProposeBody(BaseModel):
+    command: str
+    rationale: str = ""
 
 
 class SerialManager:
@@ -206,6 +212,7 @@ def create_app(
     base_dir = data_dir or resolve_data_dir()
     store = SessionStore(base_dir)
     captures = CaptureStore(captures_dir or resolve_captures_dir(base_dir))
+    proposals = ProposalStore()
     manager = SerialManager(mock=mock, port=port, baud=baud, store=store)
 
     @contextlib.asynccontextmanager
@@ -297,6 +304,29 @@ def create_app(
         if data is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
+
+    # ---- Assistant staging area ----------------------------------------------------------------
+    # Proposing a command only enqueues it here for human review; there is no path from these routes to
+    # the serial port. Running a staged command is a separate, explicit step through /api/command (and,
+    # for transmitting commands, the per-session authorisation in the UI).
+    @app.get("/api/assistant/proposals")
+    async def get_proposals() -> dict:
+        return {"proposals": proposals.list()}
+
+    @app.post("/api/assistant/proposals")
+    async def add_proposal(body: ProposeBody) -> JSONResponse:
+        if not body.command.strip():
+            return JSONResponse({"ok": False, "error": "empty command"}, status_code=400)
+        return JSONResponse({"ok": True, "proposal": proposals.propose(body.command, body.rationale)})
+
+    @app.delete("/api/assistant/proposals/{proposal_id}")
+    async def dismiss_proposal(proposal_id: int) -> dict:
+        return {"ok": proposals.dismiss(proposal_id)}
+
+    @app.delete("/api/assistant/proposals")
+    async def clear_proposals() -> dict:
+        proposals.clear()
+        return {"ok": True}
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
