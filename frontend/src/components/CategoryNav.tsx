@@ -1,10 +1,19 @@
 import { type ComponentType, type ReactNode } from "react";
-import { BookOpen, SlidersHorizontal, HelpCircle, Microscope, History, FolderOpen, MapPin } from "lucide-react";
+import {
+  BookOpen,
+  SlidersHorizontal,
+  HelpCircle,
+  Microscope,
+  History,
+  FolderOpen,
+  MapPin,
+  Bot,
+} from "lucide-react";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
 import { CATEGORY_ICONS } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
-export type View = "reference" | "control" | "analysis";
+export type View = "reference" | "control" | "analysis" | "assistant";
 
 /** PC-side analysis views (Phase 3). */
 export type AnalysisId = "history" | "captures" | "map";
@@ -27,7 +36,7 @@ interface Props {
 export function CategoryNav({ view, onView, active, onSelect, analysisActive, onAnalysisSelect }: Props) {
   return (
     <nav className="flex w-60 shrink-0 flex-col gap-4 border-r border-border bg-card/40 p-3">
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-background/40 p-1">
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background/40 p-1">
         <ModeButton active={view === "reference"} onClick={() => onView("reference")} icon={<BookOpen />}>
           Reference
         </ModeButton>
@@ -37,9 +46,16 @@ export function CategoryNav({ view, onView, active, onSelect, analysisActive, on
         <ModeButton active={view === "analysis"} onClick={() => onView("analysis")} icon={<Microscope />}>
           Analysis
         </ModeButton>
+        <ModeButton active={view === "assistant"} onClick={() => onView("assistant")} icon={<Bot />}>
+          Assistant
+        </ModeButton>
       </div>
 
-      {view === "analysis" ? (
+      {view === "assistant" ? (
+        <div className="px-2 text-xs text-muted-foreground">
+          Claude advises and drafts commands; you review and run them.
+        </div>
+      ) : view === "analysis" ? (
         <div className="flex flex-col gap-0.5">
           <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             PC-side analysis

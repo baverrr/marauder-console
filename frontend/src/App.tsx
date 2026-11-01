@@ -8,6 +8,7 @@ import { HardwarePanel } from "@/components/HardwarePanel";
 import { HistoryView } from "@/components/HistoryView";
 import { CapturesView } from "@/components/CapturesView";
 import { WardriveMapView } from "@/components/WardriveMapView";
+import { AssistantView } from "@/components/AssistantView";
 import { useBridge } from "@/lib/bridge";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
 
@@ -72,7 +73,14 @@ export default function App() {
               </div>
             )}
 
-            {view === "analysis" ? (
+            {view === "assistant" ? (
+              <AssistantView
+                connected={status.connected}
+                authorized={authorized}
+                onAuthorize={() => setAuthorized(true)}
+                onSend={(command) => void bridge.send(command)}
+              />
+            ) : view === "analysis" ? (
               analysisSel === "captures" ? (
                 <CapturesView />
               ) : analysisSel === "map" ? (

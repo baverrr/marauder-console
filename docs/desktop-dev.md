@@ -92,4 +92,13 @@ the `bundle` object in `tauri.conf.json` so `tauri build` ships it.
     with no GPS fix dropped), served by `GET /api/captures/{name}/wardrive`; `WardriveMapView` plots them
     as a dependency-free, fully-offline SVG point map (no external tiles, so the route is never sent off
     the machine). This completes the Phase 3 analysis tools.
-- Phase 4 onward: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
+- **Phase 4 (in progress, delivered in slices):** the Claude assistant — advise/draft only, under an
+  **Assistant** tab.
+  - *Slice 1 (this change):* the proposal staging area. `assistant.py` holds a `ProposalStore` (enqueue
+    only — there is no path from it to the serial port) and `command_transmits()` to flag RF-emitting
+    commands; endpoints `GET/POST/DELETE /api/assistant/proposals`. `AssistantView` lists proposed
+    commands; running one is a separate, explicit step through the normal Run control, and transmitting
+    commands still need the per-session authorisation. Tests pin the invariant: proposing never executes.
+  - *Next slice:* the Claude Agent SDK chat loop (scoped read-only tools + a `propose_command` draft tool
+    that enqueues into this same store) and the API key via the OS keychain.
+- Phase 5: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
