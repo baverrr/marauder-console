@@ -290,6 +290,14 @@ def create_app(
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
 
+    @app.get("/api/captures/{name}/wardrive")
+    async def capture_wardrive(name: str) -> JSONResponse:
+        # Parse a Wigle CSV into located points for the map. Read-only, offline; no tiles are fetched.
+        data = captures.wardrive(name)
+        if data is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(data)
+
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()

@@ -7,6 +7,7 @@ import { SerialConsole } from "@/components/SerialConsole";
 import { HardwarePanel } from "@/components/HardwarePanel";
 import { HistoryView } from "@/components/HistoryView";
 import { CapturesView } from "@/components/CapturesView";
+import { WardriveMapView } from "@/components/WardriveMapView";
 import { useBridge } from "@/lib/bridge";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
 
@@ -74,6 +75,8 @@ export default function App() {
             {view === "analysis" ? (
               analysisSel === "captures" ? (
                 <CapturesView />
+              ) : analysisSel === "map" ? (
+                <WardriveMapView />
               ) : (
                 <HistoryView />
               )

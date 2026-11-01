@@ -1,0 +1,6 @@
+WigleWifi-1.4,appRelease=MarauderConsole,model=ESP32,release=1.0,device=cyd,display=,board=,brand=
+MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type
+00:00:5e:00:53:01,PlaceholderNet-A,[WPA2-PSK-CCMP][ESS],2026-11-01 12:00:00,6,-55,0.001000,0.002000,0.0,5.0,WIFI
+00:00:5e:00:53:02,PlaceholderNet-B,[OPEN][ESS],2026-11-01 12:00:05,11,-70,0.001100,0.002100,0.0,5.0,WIFI
+00:00:5e:00:53:03,PlaceholderNet-C,[WPA3-SAE][ESS],2026-11-01 12:00:10,1,-82,0.001200,0.002200,0.0,5.0,WIFI
+00:00:5e:00:53:04,PlaceholderNet-NoFix,[WPA2-PSK-CCMP][ESS],2026-11-01 12:00:15,6,-60,0.000000,0.000000,0.0,0.0,WIFI

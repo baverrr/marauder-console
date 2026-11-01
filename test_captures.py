@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from bridge import create_app
 from capture_store import CaptureStore
 from pcap_reader import summarize_pcap
+from wigle_reader import parse_wigle
 
 FIXTURES = Path(__file__).parent / "tests" / "fixtures"
 
@@ -53,6 +54,21 @@ def test_capture_store_lists_and_summarises() -> None:
     assert store.summarize("../bridge.py") is None
 
 
+def test_wigle_parses_located_points_and_skips_no_fix() -> None:
+    data = parse_wigle(FIXTURES / "sample-wardrive-geo.csv")
+    assert data["kind"] == "wardrive"
+    assert data["count"] == 3  # the 0,0 "no fix" row is dropped
+    ssids = {p["ssid"] for p in data["points"]}
+    assert {"PlaceholderNet-A", "PlaceholderNet-B", "PlaceholderNet-C"} == ssids
+    assert "PlaceholderNet-NoFix" not in ssids
+    b = data["bounds"]
+    assert b["min_lat"] == 0.001 and b["max_lat"] == 0.0012
+
+    # The slice-2 fixture is all no-fix rows, so it yields no plottable points and no bounds.
+    empty = parse_wigle(FIXTURES / "sample-wardrive.csv")
+    assert empty["count"] == 0 and empty["bounds"] is None
+
+
 def test_capture_endpoints(tmp_path) -> None:
     app = create_app(mock=True, data_dir=tmp_path, captures_dir=FIXTURES)
     with TestClient(app) as c:
@@ -61,5 +77,9 @@ def test_capture_endpoints(tmp_path) -> None:
 
         summary = c.get("/api/captures/sample-wifi.pcap/summary").json()
         assert summary["kind"] == "pcap" and "PlaceholderNet-B" in summary["ssids"]
-
         assert c.get("/api/captures/nope.pcap/summary").status_code == 404
+
+        wardrive = c.get("/api/captures/sample-wardrive-geo.csv/wardrive").json()
+        assert wardrive["kind"] == "wardrive" and wardrive["count"] == 3
+        # A pcap is not a wardrive CSV.
+        assert c.get("/api/captures/sample-wifi.pcap/wardrive").status_code == 404

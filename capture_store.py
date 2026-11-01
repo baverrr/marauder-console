@@ -92,6 +92,20 @@ class CaptureStore:
             return summary
         return self._text_preview(path, name)
 
+    def wardrive(self, name: str) -> dict | None:
+        """Parse a Wigle wardrive CSV into located points for the map, or ``None`` if no such file."""
+        path = self._match(name)
+        if path is None or path.suffix.lower() != ".csv":
+            return None
+        from wigle_reader import parse_wigle
+
+        try:
+            data = parse_wigle(path)
+        except OSError:
+            return {"kind": "error", "name": name, "error": "could not read this file"}
+        data["name"] = name
+        return data
+
     def _text_preview(self, path: Path, name: str) -> dict:
         try:
             with path.open("r", encoding="utf-8", errors="replace") as fh:

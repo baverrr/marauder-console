@@ -61,8 +61,10 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   locally as a transcript (commands + output) you can reopen and read offline, board unplugged.
 - **Capture library + PCAP viewer (PC-side)** — also under **Analysis**: browse `.pcap`/CSV/log files
   copied from the SD card, and get a read-only packet summary of a capture (frames, span, SSIDs and
-  BSSIDs seen) from a dependency-free parser. Inspection only — no injection, nothing transmitted. A
-  wardrive map follows in the final Phase 3 slice.
+  BSSIDs seen) from a dependency-free parser. Inspection only — no injection, nothing transmitted.
+- **Wardrive map (PC-side)** — plots the located access points from a Wigle wardrive CSV on an offline,
+  self-contained point map (coloured by signal strength, with per-point details). No map tiles are
+  fetched, so your route is never sent anywhere; rows without a GPS fix are skipped.
 - **Safe streaming** — scans and sniffs (`scanall`, `sniff*`, `wardrive`, …) run until stopped; the UI
   tracks which command is running and shows Stop. It also surfaces "board busy" because the device's
   touchscreen and serial share state.
