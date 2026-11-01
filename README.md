@@ -1,5 +1,9 @@
 # Marauder Console
 
+[![CI](https://github.com/baverrr/marauder-console/actions/workflows/ci.yml/badge.svg)](https://github.com/baverrr/marauder-console/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/baverrr/marauder-console/actions/workflows/codeql.yml/badge.svg)](https://github.com/baverrr/marauder-console/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 A local, self-hosted web UI for an **ESP32 running [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder)**
 firmware — in this case a **Cheap Yellow Display** (ESP32‑2432S028, 2.4 GHz Wi‑Fi + BLE, resistive
 touchscreen) wired to a Linux box over USB serial. It is two things at once:
