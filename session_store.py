@@ -107,18 +107,29 @@ class SessionStore:
         out.sort(key=lambda m: m.get("started", ""), reverse=True)
         return out
 
-    def read_session(self, session_id: str) -> dict | None:
-        """One session's metadata plus its ordered events, or ``None`` if there is no such session."""
+    def _safe_path(self, session_id: str, suffix: str) -> str | None:
+        """Resolve ``<dir>/<id><suffix>`` only if it stays inside the sessions directory.
+
+        The id is already constrained to the store's own shape by ``_SAFE_ID``; this adds the
+        normalise-then-confine barrier (and is what keeps the file reads free of path traversal)."""
         if not _SAFE_ID.match(session_id):
             return None
-        meta_path = self._dir / f"{session_id}.json"
-        if not meta_path.is_file():
+        base = os.path.normpath(str(self._dir))
+        candidate = os.path.normpath(os.path.join(base, f"{session_id}{suffix}"))
+        if candidate != base and not candidate.startswith(base + os.sep):
             return None
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        return candidate
+
+    def read_session(self, session_id: str) -> dict | None:
+        """One session's metadata plus its ordered events, or ``None`` if there is no such session."""
+        meta_path = self._safe_path(session_id, ".json")
+        events_path = self._safe_path(session_id, ".ndjson")
+        if meta_path is None or events_path is None or not os.path.isfile(meta_path):
+            return None
+        meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
         events: list[dict] = []
-        events_path = self._dir / f"{session_id}.ndjson"
-        if events_path.is_file():
-            for line in events_path.read_text(encoding="utf-8").splitlines():
+        if os.path.isfile(events_path):
+            for line in Path(events_path).read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line:
                     continue
