@@ -1,0 +1,74 @@
+name: Release bundle
+
+# Build the desktop bundle (AppImage + .deb) and package the matching firmware on a version tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to attach artifacts to the release
+
+jobs:
+  bundle:
+    name: Desktop bundle (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: System libraries (Tauri v2)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Python bridge deps + PyInstaller
+        run: |
+          python -m venv venv
+          ./venv/bin/pip install --upgrade pip
+          ./venv/bin/pip install -r requirements.txt pyinstaller
+
+      - name: Frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build the bridge sidecar
+        run: bash scripts/build-sidecar.sh
+
+      - name: Build the Tauri bundle
+        run: npm --prefix frontend run tauri -- build --config src-tauri/tauri.bundle.conf.json
+
+      - name: Package firmware + flasher (ships with the release)
+        run: zip -r marauder-firmware-cyd.zip firmware scripts/flash-firmware.sh requirements-flash.txt
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist-artifacts
+          find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) \
+            -exec cp {} dist-artifacts/ \;
+          cp marauder-firmware-cyd.zip dist-artifacts/
+          ls -lh dist-artifacts/
+
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-artifacts/*
+
+      - name: Upload as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: marauder-console-linux
+          path: dist-artifacts/*

@@ -104,11 +104,19 @@ it to the taskbar):
 bash scripts/install-desktop.sh
 ```
 
+To build a distributable bundle instead (AppImage + `.deb`, with the Python bridge frozen in as a
+sidecar — no `./venv` needed on the target machine):
+
+```bash
+bash scripts/build-bundle.sh
+```
+
+Pushing a `v*` tag runs [`release.yml`](.github/workflows/release.yml), which builds the bundle in CI and
+attaches the AppImage, `.deb` and a firmware + flasher zip to the GitHub release — so the console and the
+matching ESP32 Marauder firmware ship together.
+
 - Roadmap and phases: [`docs/DESKTOP_PLAN.md`](docs/DESKTOP_PLAN.md)
 - Run modes and layout: [`docs/desktop-dev.md`](docs/desktop-dev.md)
-
-A later phase bundles the matching ESP32 Marauder firmware + flashing so the console and firmware ship
-together (see the roadmap).
 
 ## Hardware & accessories
 

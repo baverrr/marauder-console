@@ -22,14 +22,30 @@ TRIPLE="$("$RUSTC" -Vv | awk '/^host:/{print $2}')"
 echo "Building sidecar for target triple: $TRIPLE"
 rm -rf "$REPO/build/marauder-bridge" "$REPO/dist/marauder-bridge"
 
-# --collect-submodules uvicorn pulls in uvicorn's dynamically-imported loop/protocol backends.
-# serial_source is picked up automatically (imported by bridge.py, and --paths puts it on the search path).
+# Why each flag:
+#  --collect-submodules uvicorn   uvicorn's loop/protocol backends are imported dynamically.
+#  --collect-all anthropic        the Claude assistant SDK (lazy-imported by assistant_runner).
+#  --collect-all keyring + jeepney/secretstorage  keyring finds its OS backend via entry points, and the
+#                                 Linux Secret Service backend needs jeepney + secretstorage bundled.
+#  serial_source / assistant / assistant_runner / capture_store / session_store / pcap_reader / wigle_reader
+#    are first-party modules beside bridge.py; --paths "$REPO" puts them on the search path, and the
+#    lazy/local ones are named as hidden imports so PyInstaller definitely includes them.
 # If the bundled bridge ever fails to open a WebSocket, add:  --collect-all websockets  (or wsproto).
 "$PYI" --noconfirm --onefile --clean \
   --name marauder-bridge \
   --paths "$REPO" \
   --collect-submodules uvicorn \
+  --collect-all anthropic \
+  --collect-all keyring \
+  --collect-submodules secretstorage \
+  --hidden-import jeepney \
   --hidden-import serial_asyncio \
+  --hidden-import assistant \
+  --hidden-import assistant_runner \
+  --hidden-import capture_store \
+  --hidden-import session_store \
+  --hidden-import pcap_reader \
+  --hidden-import wigle_reader \
   "$REPO/bridge.py"
 
 mkdir -p "$REPO/src-tauri/binaries"
