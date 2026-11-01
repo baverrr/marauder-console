@@ -114,7 +114,8 @@ fn start_bridge(log_path: &Option<PathBuf>) -> (String, Option<Child>) {
                 cmd.args(bridge_args(port));
                 log_stdio(&mut cmd, log_path);
                 if let Ok(child) = cmd.spawn() {
-                    if wait_until_listening(port, Duration::from_secs(15)) {
+                    // The one-file PyInstaller sidecar self-extracts on first launch, so allow extra time.
+                    if wait_until_listening(port, Duration::from_secs(30)) {
                         return (format!("http://127.0.0.1:{port}"), Some(child));
                     }
                 }
@@ -202,6 +203,13 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 fn main() {
+    // On Linux (Wayland + some GPUs, notably AMD), webkit2gtk's DMABUF renderer paints a blank window.
+    // Disabling it before the webview starts fixes that. Set only if the user hasn't overridden it.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     tauri::Builder::default()
         .setup(|app| {
             // Keep the bridge log beside the app's other logs.
