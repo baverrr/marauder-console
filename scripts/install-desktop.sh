@@ -19,6 +19,9 @@ command -v cargo >/dev/null 2>&1 || . "$HOME/.cargo/env" 2>/dev/null || true
 
 ok "1/4  Build frontend + release binary"
 npm --prefix "$REPO/frontend" run build
+# Tauri bakes frontend/dist into the binary at compile time. cargo's own change-detection for the dist
+# dir is unreliable, so force a re-embed of the freshly built UI by refreshing the build script's input.
+touch "$REPO/src-tauri/build.rs"
 cargo build --release --manifest-path "$REPO/src-tauri/Cargo.toml"
 BIN="$REPO/src-tauri/target/release/marauder-console"
 [ -x "$BIN" ] || { warn "binary not found at $BIN — did the build fail?"; exit 1; }
