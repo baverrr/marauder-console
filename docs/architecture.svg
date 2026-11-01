@@ -1,59 +1,94 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" font-family="ui-sans-serif, system-ui, sans-serif">
-  <rect width="860" height="300" rx="12" fill="#0c1016"/>
-  <text x="430" y="34" text-anchor="middle" fill="#e6eaf0" font-size="17" font-weight="600">Marauder Console — architecture</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" font-family="ui-sans-serif, system-ui, sans-serif">
+  <rect width="900" height="470" rx="12" fill="#0c1016"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6eaf0" font-size="17" font-weight="600">Marauder Console — architecture</text>
 
-  <!-- Browser -->
+  <!-- Frontend -->
   <g>
-    <rect x="30" y="80" width="200" height="120" rx="10" fill="#141a22" stroke="#2a3340"/>
-    <text x="130" y="108" text-anchor="middle" fill="#23c87f" font-size="14" font-weight="600">Browser SPA</text>
-    <text x="130" y="130" text-anchor="middle" fill="#9aa6b2" font-size="11">React + Tailwind</text>
-    <text x="130" y="150" text-anchor="middle" fill="#9aa6b2" font-size="11">Reference view (offline)</text>
-    <text x="130" y="168" text-anchor="middle" fill="#9aa6b2" font-size="11">Control panel + console</text>
-    <text x="130" y="186" text-anchor="middle" fill="#9aa6b2" font-size="11">driven by tools.ts</text>
+    <rect x="28" y="64" width="250" height="168" rx="10" fill="#141a22" stroke="#2a3340"/>
+    <text x="153" y="90" text-anchor="middle" fill="#23c87f" font-size="14" font-weight="600">Frontend (one UI)</text>
+    <text x="153" y="110" text-anchor="middle" fill="#9aa6b2" font-size="11">React + Tailwind, driven by tools.ts</text>
+    <text x="153" y="128" text-anchor="middle" fill="#7f8b97" font-size="11">browser tab · or Tauri desktop window</text>
+    <line x1="48" y1="140" x2="258" y2="140" stroke="#2a3340"/>
+    <text x="153" y="160" text-anchor="middle" fill="#cdd5de" font-size="11">Reference · Control + console</text>
+    <text x="153" y="178" text-anchor="middle" fill="#cdd5de" font-size="11">Analysis: PCAP · wardrive map · history</text>
+    <text x="153" y="196" text-anchor="middle" fill="#cdd5de" font-size="11">Assistant: chat → staged commands</text>
+    <text x="153" y="216" text-anchor="middle" fill="#7f8b97" font-size="10.5">transmit commands gated by per-session auth</text>
   </g>
 
   <!-- Bridge -->
   <g>
-    <rect x="330" y="80" width="200" height="120" rx="10" fill="#141a22" stroke="#2a3340"/>
-    <text x="430" y="108" text-anchor="middle" fill="#23c87f" font-size="14" font-weight="600">Python bridge</text>
-    <text x="430" y="130" text-anchor="middle" fill="#9aa6b2" font-size="11">FastAPI + uvicorn</text>
-    <text x="430" y="150" text-anchor="middle" fill="#9aa6b2" font-size="11">owns the serial port</text>
-    <text x="430" y="168" text-anchor="middle" fill="#9aa6b2" font-size="11">opens on connect,</text>
-    <text x="430" y="186" text-anchor="middle" fill="#9aa6b2" font-size="11">releases on disconnect</text>
+    <rect x="340" y="64" width="250" height="168" rx="10" fill="#141a22" stroke="#2a3340"/>
+    <text x="465" y="90" text-anchor="middle" fill="#23c87f" font-size="14" font-weight="600">Python bridge</text>
+    <text x="465" y="110" text-anchor="middle" fill="#9aa6b2" font-size="11">FastAPI + uvicorn (loopback only)</text>
+    <line x1="360" y1="122" x2="570" y2="122" stroke="#2a3340"/>
+    <text x="465" y="142" text-anchor="middle" fill="#cdd5de" font-size="11">sole owner of the serial port</text>
+    <text x="465" y="160" text-anchor="middle" fill="#cdd5de" font-size="11">session history → disk</text>
+    <text x="465" y="178" text-anchor="middle" fill="#cdd5de" font-size="11">read-only capture analysis</text>
+    <text x="465" y="196" text-anchor="middle" fill="#cdd5de" font-size="11">assistant tool loop (read + draft)</text>
+    <text x="465" y="216" text-anchor="middle" fill="#7f8b97" font-size="10.5">packaged build bundles this as a sidecar</text>
   </g>
 
   <!-- Board -->
   <g>
-    <rect x="630" y="80" width="200" height="120" rx="10" fill="#141a22" stroke="#2a3340"/>
-    <text x="730" y="108" text-anchor="middle" fill="#2bb6d6" font-size="14" font-weight="600">ESP32 Marauder</text>
-    <text x="730" y="130" text-anchor="middle" fill="#9aa6b2" font-size="11">Cheap Yellow Display</text>
-    <text x="730" y="150" text-anchor="middle" fill="#9aa6b2" font-size="11">2.4 GHz Wi-Fi + BLE</text>
-    <text x="730" y="168" text-anchor="middle" fill="#9aa6b2" font-size="11">touchscreen + CLI</text>
-    <text x="730" y="186" text-anchor="middle" fill="#9aa6b2" font-size="11">does all radio work</text>
+    <rect x="652" y="64" width="220" height="168" rx="10" fill="#141a22" stroke="#2a3340"/>
+    <text x="762" y="90" text-anchor="middle" fill="#2bb6d6" font-size="14" font-weight="600">ESP32 Marauder</text>
+    <text x="762" y="112" text-anchor="middle" fill="#9aa6b2" font-size="11">Cheap Yellow Display</text>
+    <text x="762" y="132" text-anchor="middle" fill="#9aa6b2" font-size="11">2.4 GHz Wi-Fi + BLE</text>
+    <text x="762" y="152" text-anchor="middle" fill="#9aa6b2" font-size="11">touchscreen + serial CLI</text>
+    <text x="762" y="172" text-anchor="middle" fill="#9aa6b2" font-size="11">does all the radio work</text>
+    <text x="762" y="206" text-anchor="middle" fill="#7f8b97" font-size="10.5">(the board itself transmits;</text>
+    <text x="762" y="220" text-anchor="middle" fill="#7f8b97" font-size="10.5">the console only sends commands)</text>
   </g>
 
-  <!-- Arrows -->
+  <!-- Frontend <-> Bridge -->
   <g stroke="#23c87f" stroke-width="2" fill="none">
-    <path d="M232 128 L326 128" marker-end="url(#a)"/>
-    <path d="M326 152 L232 152" marker-end="url(#a)"/>
+    <path d="M280 128 L336 128" marker-end="url(#a)"/>
+    <path d="M336 168 L280 168" marker-end="url(#a)"/>
   </g>
-  <g stroke="#2bb6d6" stroke-width="2" fill="none">
-    <path d="M532 128 L626 128" marker-end="url(#b)"/>
-    <path d="M626 152 L532 152" marker-end="url(#b)"/>
-  </g>
+  <text x="308" y="120" text-anchor="middle" fill="#23c87f" font-size="10">HTTP</text>
+  <text x="308" y="184" text-anchor="middle" fill="#23c87f" font-size="10">WebSocket</text>
 
-  <text x="279" y="120" text-anchor="middle" fill="#23c87f" font-size="10">HTTP</text>
-  <text x="279" y="168" text-anchor="middle" fill="#23c87f" font-size="10">WebSocket</text>
-  <text x="579" y="120" text-anchor="middle" fill="#2bb6d6" font-size="10">USB serial</text>
-  <text x="579" y="168" text-anchor="middle" fill="#2bb6d6" font-size="10">115200 baud</text>
+  <!-- Bridge <-> Board -->
+  <g stroke="#2bb6d6" stroke-width="2" fill="none">
+    <path d="M592 128 L648 128" marker-end="url(#b)"/>
+    <path d="M648 168 L592 168" marker-end="url(#b)"/>
+  </g>
+  <text x="620" y="120" text-anchor="middle" fill="#2bb6d6" font-size="10">USB serial</text>
+  <text x="620" y="184" text-anchor="middle" fill="#2bb6d6" font-size="10">115200 baud</text>
+
+  <!-- Anthropic API (assistant) -->
+  <g>
+    <rect x="340" y="286" width="250" height="78" rx="10" fill="#15121f" stroke="#3b2f55"/>
+    <text x="465" y="310" text-anchor="middle" fill="#b794f6" font-size="13" font-weight="600">Anthropic API (Claude)</text>
+    <text x="465" y="330" text-anchor="middle" fill="#9aa6b2" font-size="11">advise &amp; draft only — proposes commands,</text>
+    <text x="465" y="347" text-anchor="middle" fill="#9aa6b2" font-size="11">never runs them · API key in the OS keychain</text>
+  </g>
+  <path d="M465 232 L465 282" stroke="#b794f6" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#c)"/>
+  <text x="478" y="262" fill="#b794f6" font-size="10">assistant only</text>
+
+  <!-- Firmware + flasher -->
+  <g>
+    <rect x="652" y="286" width="220" height="78" rx="10" fill="#15121f" stroke="#3b2f55"/>
+    <text x="762" y="310" text-anchor="middle" fill="#e0b341" font-size="13" font-weight="600">Bundled firmware + flasher</text>
+    <text x="762" y="330" text-anchor="middle" fill="#9aa6b2" font-size="11">esptool writes the pinned CYD .bin</text>
+    <text x="762" y="347" text-anchor="middle" fill="#9aa6b2" font-size="11">one-off flash, not serial control</text>
+  </g>
+  <path d="M762 282 L762 232" stroke="#e0b341" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#d)"/>
 
   <!-- Offline note -->
-  <rect x="30" y="232" width="500" height="40" rx="8" fill="#1a1f12" stroke="#3d4a1f"/>
-  <text x="46" y="250" fill="#e0b341" font-size="11" font-weight="600">Reference layer needs no board</text>
-  <text x="46" y="266" fill="#9aa6b2" font-size="11">The tool map and docs render from tools.ts; live control needs the ESP32 connected.</text>
+  <rect x="28" y="286" width="286" height="78" rx="10" fill="#1a1f12" stroke="#3d4a1f"/>
+  <text x="44" y="310" fill="#e0b341" font-size="12" font-weight="600">Works offline</text>
+  <text x="44" y="330" fill="#9aa6b2" font-size="11">Reference, and saved captures/sessions,</text>
+  <text x="44" y="347" fill="#9aa6b2" font-size="11">render with no board connected.</text>
+
+  <!-- Footer -->
+  <text x="450" y="410" text-anchor="middle" fill="#7f8b97" font-size="11">The bridge binds to 127.0.0.1 only. The assistant is the sole outbound call, and reaches no board or port.</text>
+  <text x="450" y="434" text-anchor="middle" fill="#60707e" font-size="10.5">Web build: browser + bridge. Desktop build: Tauri window + bridge sidecar (no browser, no separate install).</text>
 
   <defs>
     <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#23c87f"/></marker>
     <marker id="b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#2bb6d6"/></marker>
+    <marker id="c" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#b794f6"/></marker>
+    <marker id="d" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#e0b341"/></marker>
   </defs>
 </svg>

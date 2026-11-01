@@ -39,7 +39,7 @@ layers are deliberately split:
   and output. Connect the board, and the same tool cards gain a **Run** control.
 
 <p align="center">
-  <img src="docs/architecture.svg" alt="Architecture: Browser SPA talks to the Python bridge over HTTP and WebSocket; the bridge talks to the ESP32 over USB serial. The reference layer needs no board." width="820">
+  <img src="docs/architecture.svg" alt="Architecture: one React UI (browser tab or Tauri desktop window) talks to the loopback Python bridge over HTTP and WebSocket; the bridge owns the USB serial link to the ESP32, keeps session history and read-only capture analysis, and runs the assistant tool loop. The Claude assistant is the only outbound call (advise and draft only, key in the OS keychain); bundled firmware flashes the board via esptool. Reference and saved data work with no board." width="860">
 </p>
 
 ```
@@ -87,6 +87,10 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
 
 <p align="center">
   <img src="docs/images/control.jpg" alt="Control view: a tool card with an editable command field and Run button, and the live serial console streaming scan output at the bottom" width="800">
+</p>
+
+<p align="center">
+  <img src="docs/images/assistant.jpg" alt="Assistant view: the Claude panel with an API-key status bar, a chat pane, and a staging area of proposed commands — scanall with a Send button and 'attack -t deauth' flagged as transmitting with an Authorise button. Claude drafts commands; the human runs them." width="800">
 </p>
 
 ## Desktop app (in progress)
