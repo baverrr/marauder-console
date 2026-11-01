@@ -64,10 +64,14 @@ export function WardriveMapView() {
     const spanLat = Math.max(1e-6, max_lat - min_lat);
     const spanLon = Math.max(1e-6, (max_lon - min_lon) * cos);
     const scale = Math.min((W - 2 * PAD) / spanLon, (H - 2 * PAD) / spanLat);
+    // Centre the plot: offset by half the leftover space on the axis that isn't the limiting one (and for
+    // a zero-span / single-point file this puts the marker in the middle instead of the bottom-left).
+    const offX = (W - 2 * PAD - spanLon * scale) / 2;
+    const offY = (H - 2 * PAD - spanLat * scale) / 2;
     return data.points.map((p) => ({
       p,
-      x: PAD + ((p.lon - min_lon) * cos) * scale,
-      y: H - PAD - (p.lat - min_lat) * scale, // north up
+      x: PAD + offX + (p.lon - min_lon) * cos * scale,
+      y: H - PAD - offY - (p.lat - min_lat) * scale, // north up
     }));
   }, [data]);
 

@@ -43,7 +43,7 @@ export function ToolCard({
   const gated = isActive && !authorized;
   // Streaming tools can't start while another scan runs; but non-streaming commands (info, brightness,
   // and crucially the dedicated stopscan card) must stay usable mid-scan.
-  const canRun = connected && !gated && (!tool.streaming || !boardBusy || running);
+  const canRun = connected && !gated && command.trim() !== "" && (!tool.streaming || !boardBusy || running);
 
   const setArg = (name: string, v: string) => {
     setManual(null);

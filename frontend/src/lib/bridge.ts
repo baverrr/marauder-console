@@ -113,6 +113,9 @@ export function useBridge() {
       };
       ws.onclose = () => {
         setWsOnline(false);
+        // The bridge pushes status; if the socket drops we no longer know it, so don't keep showing the
+        // last "connected/running" state (which would leave Run controls live and the console "scanning").
+        setStatus((s) => ({ ...s, connected: false, running: false }));
         if (!closed) retry.current = setTimeout(connect, 1500);
       };
       ws.onerror = () => ws.close();

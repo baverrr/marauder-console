@@ -142,6 +142,8 @@ function PcapDetail({ s }: { s: Extract<CaptureSummary, { kind: "pcap" }> }) {
     s.first != null && s.last != null
       ? `${new Date(s.first * 1000).toLocaleString()} → ${new Date(s.last * 1000).toLocaleString()}`
       : "—";
+  const ssids = s.ssids ?? []; // defend against a summary missing the arrays rather than throwing in render
+  const bssids = s.bssids ?? [];
   return (
     <div className="flex flex-col gap-4 text-sm">
       <div>
@@ -153,10 +155,10 @@ function PcapDetail({ s }: { s: Extract<CaptureSummary, { kind: "pcap" }> }) {
         <p className="mt-0.5 text-xs text-muted-foreground">{span}</p>
       </div>
 
-      <NameList title={`SSIDs seen (${s.ssids.length})`} items={s.ssids} empty="No SSIDs in this capture." />
+      <NameList title={`SSIDs seen (${ssids.length})`} items={ssids} empty="No SSIDs in this capture." />
       <NameList
-        title={`BSSIDs seen (${s.bssids.length})`}
-        items={s.bssids}
+        title={`BSSIDs seen (${bssids.length})`}
+        items={bssids}
         empty="No BSSIDs in this capture."
         mono
       />

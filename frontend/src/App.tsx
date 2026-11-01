@@ -76,6 +76,7 @@ export default function App() {
             {view === "assistant" ? (
               <AssistantView
                 connected={status.connected}
+                boardBusy={status.running}
                 authorized={authorized}
                 onAuthorize={() => setAuthorized(true)}
                 onSend={(command) => void bridge.send(command)}
