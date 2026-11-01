@@ -37,6 +37,17 @@ def test_connect_then_disconnect(client: TestClient) -> None:
     assert client.get("/api/status").json()["connected"] is False
 
 
+def test_cors_allows_desktop_shell_origin(client: TestClient) -> None:
+    # The Tauri desktop shell's webview calls the bridge cross-origin, so it must get CORS headers back;
+    # an unrelated web origin must not.
+    allowed = client.get("/api/status", headers={"Origin": "tauri://localhost"})
+    assert allowed.headers.get("access-control-allow-origin") == "tauri://localhost"
+    loopback = client.get("/api/status", headers={"Origin": "http://localhost:5173"})
+    assert loopback.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    blocked = client.get("/api/status", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in blocked.headers
+
+
 def test_command_requires_connection(client: TestClient) -> None:
     resp = client.post("/api/command", json={"command": "info"})
     assert resp.status_code == 409  # not connected
