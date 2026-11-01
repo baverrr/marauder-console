@@ -232,6 +232,7 @@ _STATIC_RESPONSES: dict[str, list[str]] = {
 }
 
 _STREAMING_VERBS = {
+    "attack",
     "scanall",
     "sniffbeacon",
     "sniffprobe",

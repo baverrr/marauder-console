@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plug, PlugZap, ShieldAlert, Loader2, Cable, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,12 @@ interface Props {
 export function TopBar({ status, wsOnline, onConnect, onDisconnect }: Props) {
   const [busy, setBusy] = useState(false);
   const [port, setPort] = useState(status.port);
+
+  // Keep the field in step with the bridge's reported default port while disconnected (e.g. a bridge
+  // started with --serial-port or --mock), without clobbering an edit mid-connection.
+  useEffect(() => {
+    if (!status.connected) setPort(status.port);
+  }, [status.port, status.connected]);
 
   const act = async (fn: () => Promise<unknown> | void) => {
     setBusy(true);

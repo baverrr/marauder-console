@@ -20,6 +20,9 @@ function renderArg(arg: ToolArg, value: string): string {
 
 /** Assemble the serial command from the base and the current arg values. */
 export function buildCommand(tool: Tool, values: Record<string, string>): string {
+  // A command with no args is sent verbatim: its explicit base, else its full syntax. Using only the
+  // first word here would drop fixed flags like the "-t deauth" in "attack -t deauth".
+  if (tool.args.length === 0) return tool.base ?? tool.syntax;
   const parts = [commandBase(tool)];
   for (const a of tool.args) {
     const rendered = renderArg(a, values[a.name] ?? "");

@@ -50,6 +50,16 @@ def test_streaming_sets_and_clears_running(client: TestClient) -> None:
     assert client.get("/api/status").json()["running"] is False
 
 
+def test_attack_command_streams(client: TestClient) -> None:
+    # Regression: "attack -t deauth/beacon/probe" must count as a streaming command so the UI shows Stop
+    # and the mock streams instead of replying "Unknown command".
+    client.post("/api/connect")
+    client.post("/api/command", json={"command": "attack -t deauth"})
+    assert client.get("/api/status").json()["running"] is True
+    client.post("/api/stop")
+    assert client.get("/api/status").json()["running"] is False
+
+
 def test_websocket_streams_status_and_lines(client: TestClient) -> None:
     client.post("/api/connect")
     with client.websocket_connect("/ws") as ws:

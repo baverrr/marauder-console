@@ -33,7 +33,7 @@ const ADDONS: Item[] = [
     icon: BatteryCharging,
     title: "LiPo battery + charger",
     tag: "portability",
-    body: "The CYD has no onboard charger, so add a TP4056 + cell or run from a USB power bank. Nothing software-side, but it frees wardrive and foxhunt from the USB cable.",
+    body: "Depending on the board revision the CYD may have no onboard charger — check yours before wiring. If it doesn't, add a TP4056 + cell or run from a USB power bank. Nothing software-side, but it frees wardrive and foxhunt from the USB cable.",
   },
   {
     icon: Antenna,

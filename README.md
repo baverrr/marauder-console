@@ -77,7 +77,7 @@ unlock most of the "Requires" tools:
 |---|---|---|
 | **microSD card** | `.pcap` captures (`sniffraw`, `sniffpmkid`, `sniffsae`, `sniffpwn`), `save`/`load`, Wigle `wardrive` logs | 32 GB is ideal — 32 GB and under format as **FAT32** natively; 64 GB+ default to exFAT, which Marauder won't read. Slot is already on the CYD. |
 | **UART GPS module** | Location for `wardrive`, `wardrivepoi`, `foxhunt` | e.g. u‑blox NEO‑6M / NEO‑M8N / BN‑220, wired to the exposed GPIO header. Without a fix, location fields stay empty. |
-| LiPo battery + TP4056 | Portability for field use | The CYD has no onboard charger. |
+| LiPo battery + TP4056 | Portability for field use | Some CYD revisions have no onboard charger — check yours before wiring. |
 
 **Not supported by Marauder** (don't chase these): 5 GHz Wi‑Fi (the radio is 2.4 GHz only), and sub‑GHz /
 CC1101 / NRF24 (Flipper-Zero territory). BLE tools use the ESP32's built-in radio — no add-on needed.
