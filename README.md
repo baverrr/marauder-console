@@ -57,6 +57,9 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   Run controls, so they can never drift apart.
 - **Live serial console** — streamed over a WebSocket, colour-coded, with autoscroll, a free-form command
   box and a **Stop** button wired to `stopscan`.
+- **Session history (PC-side)** — under the **Analysis** tab, every connect→disconnect span is saved
+  locally as a transcript (commands + output) you can reopen and read offline, board unplugged. The first
+  of the Phase 3 analysis tools; a capture/PCAP library and a wardrive map follow.
 - **Safe streaming** — scans and sniffs (`scanall`, `sniff*`, `wardrive`, …) run until stopped; the UI
   tracks which command is running and shows Stop. It also surfaces "board busy" because the device's
   touchscreen and serial share state.
