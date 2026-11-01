@@ -7,6 +7,29 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
+/**
+ * Absolute base URL of the Python bridge. The desktop shell (Tauri) injects
+ * `window.__MARAUDER_BRIDGE_URL__` before the page loads so requests reach the bridge regardless of the
+ * webview's own origin. In the browser build the value is absent and we stay same-origin ("").
+ */
+const BASE = ((): string => {
+  if (typeof window !== "undefined") {
+    const u = (window as unknown as { __MARAUDER_BRIDGE_URL__?: string }).__MARAUDER_BRIDGE_URL__;
+    if (u) return u.replace(/\/+$/, "");
+  }
+  return "";
+})();
+
+/** Build the WebSocket URL for `path`, honouring the injected bridge base or falling back to the page. */
+function wsUrl(path: string): string {
+  if (BASE) {
+    const u = new URL(BASE);
+    return `${u.protocol === "https:" ? "wss" : "ws"}://${u.host}${path}`;
+  }
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}${path}`;
+}
+
 export interface BridgeStatus {
   connected: boolean;
   mock: boolean;
@@ -29,7 +52,7 @@ type WsMessage =
 
 async function postJSON(path: string, body?: unknown): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch(path, {
+    const res = await fetch(`${BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
@@ -70,8 +93,7 @@ export function useBridge() {
   useEffect(() => {
     let closed = false;
     const connect = () => {
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      const ws = new WebSocket(wsUrl("/ws"));
       wsRef.current = ws;
       ws.onopen = () => setWsOnline(true);
       ws.onmessage = (ev) => {
@@ -127,6 +149,29 @@ export function useBridge() {
   }, []);
 
   const clearLines = useCallback(() => setLines([]), []);
+
+  // When running inside the Tauri desktop shell, mirror its tray-menu actions onto the bridge.
+  useEffect(() => {
+    const tauri = (
+      window as unknown as {
+        __TAURI__?: {
+          event?: {
+            listen?: (e: string, cb: (ev: { payload: unknown }) => void) => Promise<() => void>;
+          };
+        };
+      }
+    ).__TAURI__;
+    const listen = tauri?.event?.listen;
+    if (!listen) return;
+    const pending = listen("menu", (ev) => {
+      if (ev.payload === "connect") void connect();
+      else if (ev.payload === "disconnect") void disconnect();
+      else if (ev.payload === "stop") void stop();
+    });
+    return () => {
+      void pending.then((un) => un());
+    };
+  }, [connect, disconnect, stop]);
 
   return { status, lines, wsOnline, error, connect, disconnect, send, stop, clearLines };
 }

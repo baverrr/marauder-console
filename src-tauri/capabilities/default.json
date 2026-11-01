@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Core capability for the main window: lets the web UI receive the native menu/tray events the shell emits.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

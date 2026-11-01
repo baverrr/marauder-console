@@ -29,6 +29,7 @@ from collections import deque
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -190,6 +191,22 @@ def create_app(*, mock: bool = False, port: str = DEFAULT_PORT, baud: int = DEFA
 
     app = FastAPI(title="Marauder Console bridge", lifespan=lifespan)
     app.state.manager = manager
+
+    # The web UI is same-origin in the browser build, but the Tauri desktop shell loads it from its own
+    # webview origin (tauri://localhost, or https://tauri.localhost on Windows) and calls this bridge
+    # cross-origin. Allow those origins plus any loopback dev server. The bridge binds to 127.0.0.1, so
+    # this does not widen network exposure.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ],
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/api/status")
     async def get_status() -> dict:
