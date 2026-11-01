@@ -25,8 +25,11 @@ rm -rf "$REPO/build/marauder-bridge" "$REPO/dist/marauder-bridge"
 # Why each flag:
 #  --collect-submodules uvicorn   uvicorn's loop/protocol backends are imported dynamically.
 #  --collect-all anthropic        the Claude assistant SDK (lazy-imported by assistant_runner).
-#  --collect-all keyring + jeepney/secretstorage  keyring finds its OS backend via entry points, and the
-#                                 Linux Secret Service backend needs jeepney + secretstorage bundled.
+#  --collect-all keyring + --copy-metadata keyring  keyring discovers its OS backend via package-metadata
+#                                 entry points, so the .dist-info metadata MUST be bundled too — without
+#                                 --copy-metadata the frozen app finds no backend and the key is lost on
+#                                 every restart. The Linux Secret Service backend needs jeepney +
+#                                 secretstorage bundled as well.
 #  serial_source / assistant / assistant_runner / capture_store / session_store / pcap_reader / wigle_reader
 #    are first-party modules beside bridge.py; --paths "$REPO" puts them on the search path, and the
 #    lazy/local ones are named as hidden imports so PyInstaller definitely includes them.
@@ -37,6 +40,7 @@ rm -rf "$REPO/build/marauder-bridge" "$REPO/dist/marauder-bridge"
   --collect-submodules uvicorn \
   --collect-all anthropic \
   --collect-all keyring \
+  --copy-metadata keyring \
   --collect-submodules secretstorage \
   --hidden-import jeepney \
   --hidden-import serial_asyncio \

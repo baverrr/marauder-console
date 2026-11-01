@@ -116,8 +116,9 @@ bash scripts/build-bundle.sh
 ```
 
 Pushing a `v*` tag runs [`release.yml`](.github/workflows/release.yml), which builds the bundle in CI and
-attaches the AppImage, `.deb` and a firmware + flasher zip to the GitHub release — so the console and the
-matching ESP32 Marauder firmware ship together.
+attaches the `.deb`, the AppImage (best-effort) and a firmware + flasher zip to the GitHub release — so the
+console and the matching ESP32 Marauder firmware ship together. The artifacts are built against
+webkit2gtk-4.1, so they need a recent distro (Ubuntu 24.04+ / equivalent).
 
 - Roadmap and phases: [`docs/DESKTOP_PLAN.md`](docs/DESKTOP_PLAN.md)
 - Run modes and layout: [`docs/desktop-dev.md`](docs/desktop-dev.md)
