@@ -214,7 +214,10 @@ def run_chat(client: Any, messages: list[dict], ctx: ChatContext, *, model: str 
             messages=convo,
         )
         content = list(getattr(resp, "content", []) or [])
-        convo.append({"role": "assistant", "content": [_block_to_dict(b) for b in content]})
+        # Only resend text/tool_use blocks — passing back an unknown block type (e.g. "thinking") would
+        # make the next messages.create reject the request.
+        assistant_blocks = [_block_to_dict(b) for b in content if _field(b, "type") in ("text", "tool_use")]
+        convo.append({"role": "assistant", "content": assistant_blocks})
 
         tool_uses = [b for b in content if _field(b, "type") == "tool_use"]
         texts = [_field(b, "text", "") for b in content if _field(b, "type") == "text"]
@@ -228,13 +231,18 @@ def run_chat(client: Any, messages: list[dict], ctx: ChatContext, *, model: str 
         for tu in tool_uses:
             name = _field(tu, "name")
             tu_id = _field(tu, "id")
-            tu_input = _field(tu, "input", {}) or {}
+            tu_input = _field(tu, "input", {})
+            if not isinstance(tu_input, dict):  # the model occasionally returns a non-object input
+                tu_input = {}
             result = _dispatch(name, tu_input, ctx)
             results.append(
                 {"type": "tool_result", "tool_use_id": tu_id, "content": json.dumps(result)}
             )
         convo.append({"role": "user", "content": results})
 
+    if not reply_text:
+        # Loop exhausted while still calling tools, or an empty response — don't return a blank bubble.
+        reply_text = "I staged what I could; I hit my tool-call limit before writing a summary."
     added = [p for p in ctx.proposals.list() if p["id"] not in staged_ids_before]
     return {"reply": reply_text, "proposals_added": added}
 

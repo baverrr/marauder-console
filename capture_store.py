@@ -101,7 +101,7 @@ class CaptureStore:
 
         try:
             data = parse_wigle(path)
-        except OSError:
+        except Exception:  # noqa: BLE001 - untrusted file: any parse error (OSError, csv.Error, …) → fixed msg
             return {"kind": "error", "name": name, "error": "could not read this file"}
         data["name"] = name
         return data
