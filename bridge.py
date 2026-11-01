@@ -24,6 +24,7 @@ import argparse
 import asyncio
 import contextlib
 import json
+import logging
 import os
 from collections import deque
 from pathlib import Path
@@ -35,6 +36,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from assistant import ProposalStore
+from assistant_runner import ChatContext, KeyStore, build_client, run_chat
 from capture_store import CaptureStore, resolve_captures_dir
 from serial_source import (
     DEFAULT_BAUD,
@@ -67,6 +69,17 @@ class ConnectBody(BaseModel):
 class ProposeBody(BaseModel):
     command: str
     rationale: str = ""
+
+
+class ChatBody(BaseModel):
+    # The full conversation so far (roles user/assistant), plus the command catalogue from the UI so the
+    # assistant's list_tools tool can see tools.ts without the backend duplicating it.
+    messages: list[dict]
+    tools: list[dict] = []
+
+
+class KeyBody(BaseModel):
+    key: str
 
 
 class SerialManager:
@@ -177,6 +190,11 @@ class SerialManager:
         if "firmware" in low and "version" in low:
             self.firmware = line.split(":", 1)[-1].strip() or line.strip()
 
+    def recent_lines(self, n: int = 50) -> list[str]:
+        """The last ``n`` console lines (read-only; used by the assistant's tail_console tool)."""
+        n = max(1, min(n, len(self._history)))
+        return list(self._history)[-n:]
+
     async def add_client(self, ws: WebSocket) -> None:
         self._clients.add(ws)
         await ws.send_text(json.dumps({"type": "status", "data": self.status()}))
@@ -213,6 +231,7 @@ def create_app(
     store = SessionStore(base_dir)
     captures = CaptureStore(captures_dir or resolve_captures_dir(base_dir))
     proposals = ProposalStore()
+    keystore = KeyStore()
     manager = SerialManager(mock=mock, port=port, baud=baud, store=store)
 
     @contextlib.asynccontextmanager
@@ -327,6 +346,43 @@ def create_app(
     async def clear_proposals() -> dict:
         proposals.clear()
         return {"ok": True}
+
+    # ---- Assistant API key (OS keychain; the value is set by the user and never returned) -------
+    @app.get("/api/assistant/key")
+    async def key_status() -> dict:
+        return {"has_key": keystore.has()}
+
+    @app.post("/api/assistant/key")
+    async def set_key(body: KeyBody) -> JSONResponse:
+        if not body.key.strip():
+            return JSONResponse({"ok": False, "error": "empty key"}, status_code=400)
+        keystore.set(body.key)
+        return JSONResponse({"ok": True, "has_key": keystore.has()})
+
+    @app.delete("/api/assistant/key")
+    async def clear_key() -> dict:
+        keystore.clear()
+        return {"ok": True, "has_key": keystore.has()}
+
+    # ---- Assistant chat (advise/draft tool loop) ------------------------------------------------
+    @app.post("/api/assistant/chat")
+    async def assistant_chat(body: ChatBody) -> JSONResponse:
+        api_key = keystore.get()
+        if not api_key:
+            return JSONResponse(
+                {"ok": False, "error": "No Anthropic API key set. Add one in the assistant settings."},
+                status_code=428,  # precondition required
+            )
+        ctx = ChatContext(
+            manager=manager, captures=captures, proposals=proposals, tools_catalogue=body.tools
+        )
+        try:
+            client = build_client(api_key)
+            result = await asyncio.to_thread(run_chat, client, body.messages, ctx)
+        except Exception as exc:  # noqa: BLE001 - surface a generic failure, not the raw exception
+            logging.getLogger("marauder.assistant").warning("assistant chat failed: %s", exc)
+            return JSONResponse({"ok": False, "error": "assistant request failed"}, status_code=502)
+        return JSONResponse({"ok": True, **result})
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:

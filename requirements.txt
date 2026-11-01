@@ -3,6 +3,10 @@ uvicorn[standard]>=0.27
 pyserial>=3.5
 pyserial-asyncio>=0.6
 pydantic>=2.6
+# Claude assistant (Phase 4): the Anthropic SDK drives the advise/draft tool loop; keyring stores the
+# API key in the OS keychain. Both import lazily, so the bridge still runs without a key or a keychain.
+anthropic>=0.40
+keyring>=25.0
 # test / dev only
 httpx>=0.27
 pytest>=8.0

@@ -114,6 +114,13 @@ will bundle the ESP32 Marauder firmware + flashing so the console and firmware s
     commands; endpoints `GET/POST/DELETE /api/assistant/proposals`. `AssistantView` lists proposed
     commands; running one is a separate, explicit step through the normal Run control, and transmitting
     commands still need the per-session authorisation. Tests pin the invariant: proposing never executes.
-  - *Next slice:* the Claude Agent SDK chat loop (scoped read-only tools + a `propose_command` draft tool
-    that enqueues into this same store) and the API key via the OS keychain.
+  - *Slice 2:* the chat loop. `assistant_runner.py` runs an Anthropic SDK tool-use loop with a **scoped**
+    toolset — read-only tools (`get_status`, `tail_console`, `list_tools`, `list_captures`,
+    `summarize_pcap`, `wardrive_points`) plus the one draft tool `propose_command` that enqueues into the
+    slice-1 store. There is no tool that sends/runs/stops/transmits, so the model cannot touch the serial
+    port. `POST /api/assistant/chat` runs it; the API key lives in the OS keychain via `keyring`
+    (`GET/POST/DELETE /api/assistant/key`, which never return the value). The command catalogue for
+    `list_tools` is passed in from the UI (`tools.ts`), so the backend doesn't duplicate it. The runtime
+    is the Anthropic SDK tool-runner rather than the Agent SDK — lighter to bundle in the sidecar and
+    gives tighter control over the tool surface. Tests pin the no-execute invariant with a fake client.
 - Phase 5: see [`DESKTOP_PLAN.md`](DESKTOP_PLAN.md).
