@@ -247,6 +247,18 @@ marauder-console/
 Marauder Console is an independent interface and is not affiliated with, endorsed by, or supported by
 the ESP32 Marauder project. "ESP32 Marauder" and related names belong to their respective owners.
 
+The matching firmware is **bundled** (ESP32 Marauder `v1.20.0` for the Cheap Yellow Display,
+ESP32‑2432S028), redistributed unmodified under its MIT license, so the board and the console ship
+together. Flash it with:
+
+```bash
+bash scripts/flash-firmware.sh --port /dev/ttyUSB0
+```
+
+The flasher verifies each file's `sha256`, won't run while the serial port is busy, does a read-only check
+and asks for confirmation before writing. See [`firmware/`](firmware/) (binaries, `manifest.json`, upstream
+license) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 ## License & legal
 
 - **License:** MIT — see [LICENSE](LICENSE). You may use, modify and redistribute the code under those terms.
@@ -254,6 +266,8 @@ the ESP32 Marauder project. "ESP32 Marauder" and related names belong to their r
   legal-compliance requirements for a transmitting security tool, no-warranty and liability terms.
 - **Privacy Policy:** [PRIVACY.md](PRIVACY.md) — the app runs entirely on your own computer, collects
   nothing, and sends nothing to the author.
+- **Third-party notices:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — the bundled ESP32 Marauder
+  firmware (MIT) and the `esptool` flashing tool (GPL-2.0, installed on demand, not redistributed).
 
 ## Notes & disclaimer
 

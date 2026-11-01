@@ -1,0 +1,45 @@
+{
+  "upstream": {
+    "project": "ESP32 Marauder",
+    "author": "justcallmekoko",
+    "repo": "https://github.com/justcallmekoko/ESP32Marauder",
+    "license": "MIT",
+    "tag": "v1.20.0",
+    "commit": "511bb3694d0c4dc064888e762bde44fcc9b7f48a",
+    "release": "https://github.com/justcallmekoko/ESP32Marauder/releases/tag/v1.20.0",
+    "asset_date": "20261028"
+  },
+  "note": "Redistributed unmodified under the upstream MIT license (see UPSTREAM-LICENSE.txt). Marauder Console is an independent, unaffiliated interface.",
+  "chip": "esp32",
+  "boards": {
+    "cyd_2432S028": {
+      "description": "Cheap Yellow Display (ESP32-2432S028), single USB",
+      "files": [
+        {
+          "offset": "0x1000",
+          "path": "cyd_2432S028/bootloader.bin",
+          "sha256": "0fdc7cfec9ebdeabc63484b2569488f60b2100f34b01db323b03372132b0f5f1",
+          "bytes": 17568
+        },
+        {
+          "offset": "0x8000",
+          "path": "cyd_2432S028/partition-table.bin",
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "bytes": 3072
+        },
+        {
+          "offset": "0xe000",
+          "path": "cyd_2432S028/ota-data.bin",
+          "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
+          "bytes": 8192
+        },
+        {
+          "offset": "0x10000",
+          "path": "cyd_2432S028/app.bin",
+          "sha256": "c4b807e4d70ed2da71f529ec61a5897ec272c298410477a31097d91ae8a86501",
+          "bytes": 1620208
+        }
+      ]
+    }
+  }
+}
