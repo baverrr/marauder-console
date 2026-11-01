@@ -201,6 +201,16 @@ marauder-console/
 | Reference offline | The tool map is static data compiled into the frontend, so the docs render with the bridge disconnected (or no board at all). |
 | Mock board | `serial_source.MockSerialSource` fakes Marauder's `help`/`info` and streams generic placeholder lines for scan/sniff commands until `stopscan`. |
 
+## Credits
+
+- **[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) firmware** by
+  [justcallmekoko](https://github.com/justcallmekoko) — the upstream project this console is a client
+  for. All of the Wi-Fi and Bluetooth functionality lives in that firmware, running on the ESP32;
+  Marauder Console only sends it commands and shows its output.
+
+Marauder Console is an independent interface and is not affiliated with, endorsed by, or supported by
+the ESP32 Marauder project. "ESP32 Marauder" and related names belong to their respective owners.
+
 ## License & legal
 
 - **License:** MIT — see [LICENSE](LICENSE). You may use, modify and redistribute the code under those terms.
