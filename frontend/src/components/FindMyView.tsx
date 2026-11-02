@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Radar, ArrowUp, ArrowDown, Minus, Crosshair, Play, Square, Eraser, X } from "lucide-react";
+import { Radar, ArrowUp, ArrowDown, Minus, Crosshair, Play, Square, Eraser, X, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,15 @@ import {
   type ProximityBand,
   type Trend,
 } from "@/lib/findmy";
+import { bytesToHex, type DecodedAdv } from "@/lib/rawadv";
+
+/** Short label for the Apple/Find My flavour of a decoded advert, or null if it isn't one. */
+function appleLabel(adv: DecodedAdv | null): string | null {
+  if (!adv?.isApple) return null;
+  if (adv.appleKind === "offline-finding") return "Find My";
+  if (adv.appleKind === "nearby") return "Find My (nearby)";
+  return "Apple";
+}
 
 interface Props {
   lines: ConsoleLine[];
@@ -142,7 +151,14 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
               >
                 <Bars rssi={d.rssi} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{d.name ?? "Unknown device"}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-sm font-medium">{d.name ?? "Unknown device"}</span>
+                    {appleLabel(d.adv) && (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        <Tag className="size-2.5" /> {appleLabel(d.adv)}
+                      </span>
+                    )}
+                  </div>
                   <div className="truncate font-mono text-xs text-muted-foreground">{d.mac}</div>
                 </div>
                 <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium ring-1", BAND_CLASS[d.band])}>
@@ -196,7 +212,40 @@ function HomingPanel({ device, onClose, onCalibrate }: { device: FindMyDevice; o
           <Crosshair /> It's at 1 m
         </Button>
       </div>
+      {device.adv && <AdvDetails adv={device.adv} />}
     </div>
+  );
+}
+
+/**
+ * Decoded raw advertisement for the selected device. Only shown when the custom raw-capture firmware is
+ * running (`sniffbt -t airtag -raw`); with stock firmware there are no raw bytes and this is absent.
+ */
+function AdvDetails({ adv }: { adv: DecodedAdv }) {
+  const rows: { label: string; value: string }[] = [];
+  if (adv.flags !== null) rows.push({ label: "Flags", value: `0x${adv.flags.toString(16).padStart(2, "0")}` });
+  if (adv.companyId !== null) {
+    const co = `0x${adv.companyId.toString(16).padStart(4, "0")}`;
+    rows.push({ label: "Manufacturer", value: adv.isApple ? `Apple (${co})` : co });
+  }
+  if (adv.services.length) rows.push({ label: "Services", value: adv.services.join(", ") });
+
+  return (
+    <details className="mt-3 border-t border-primary/20 pt-3">
+      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+        Advertisement ({adv.structures.length} record{adv.structures.length === 1 ? "" : "s"})
+      </summary>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        {rows.map((r) => (
+          <div key={r.label} className="contents">
+            <dt className="text-muted-foreground">{r.label}</dt>
+            <dd className="min-w-0 break-all font-mono">{r.value}</dd>
+          </div>
+        ))}
+        <dt className="text-muted-foreground">Raw</dt>
+        <dd className="min-w-0 break-all font-mono text-muted-foreground">{bytesToHex(adv.raw)}</dd>
+      </dl>
+    </details>
   );
 }
 

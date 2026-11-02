@@ -1,0 +1,58 @@
+diff --git a/esp32_marauder/CommandLine.cpp b/esp32_marauder/CommandLine.cpp
+index d2c0c24..46fb71d 100644
+--- a/esp32_marauder/CommandLine.cpp
++++ b/esp32_marauder/CommandLine.cpp
+@@ -1364,6 +1364,11 @@ void CommandLine::runCommand(String input) {
+       #ifdef HAS_BT
+         int bt_type_sw = this->argSearch(&cmd_args, "-t");
+ 
++        // Marauder Console patch: `-raw` opts into dumping the full advertisement payload as hex
++        // (a "RAWADV <MAC> <rssi> <hex>" line) alongside the normal parsed output. Off unless asked.
++        int bt_raw_sw = this->argSearch(&cmd_args, "-raw");
++        wifi_scan_obj.bt_raw_dump = (bt_raw_sw != -1);
++
+         // Specifying type of bluetooth sniff
+         if (bt_type_sw != -1) {
+           String bt_type = cmd_args.get(bt_type_sw + 1);
+diff --git a/esp32_marauder/WiFiScan.cpp b/esp32_marauder/WiFiScan.cpp
+index 198530d..4fa6af9 100644
+--- a/esp32_marauder/WiFiScan.cpp
++++ b/esp32_marauder/WiFiScan.cpp
+@@ -542,6 +542,22 @@ extern "C" {
+               //Serial.flush();
+               Serial.print(rssi);
+               Serial.println(" " + mac);
++              // Marauder Console patch: opt-in raw advertisement dump. `payLoad`/`len` above are the full
++              // advertising data; print them as hex on a distinct "RAWADV " line so the console can decode
++              // the AD structures. payLoad indexes the same for the NimBLE-1 (uint8_t*) and NimBLE-2
++              // (std::vector) forms resolved earlier in this branch.
++              if (wifi_scan_obj.bt_raw_dump) {
++                Serial.print(F("RAWADV "));
++                Serial.print(mac);
++                Serial.print(' ');
++                Serial.print(rssi);
++                Serial.print(' ');
++                for (size_t i = 0; i < len; i++) {
++                  if (payLoad[i] < 0x10) Serial.print('0');
++                  Serial.print(payLoad[i], HEX);
++                }
++                Serial.println();
++              }
+               //Serial.print(F("Payload Len: "));
+               //Serial.print(len);
+               //Serial.println("\n");
+diff --git a/esp32_marauder/WiFiScan.h b/esp32_marauder/WiFiScan.h
+index 47d1d45..aca80b8 100644
+--- a/esp32_marauder/WiFiScan.h
++++ b/esp32_marauder/WiFiScan.h
+@@ -896,6 +896,10 @@ class WiFiScan
+ 
+     volatile bool bt_cb_busy = false;
+     volatile bool bt_pending_clear = false;
++    // Marauder Console patch: when set (via `sniffbt ... -raw`), the BLE scan callback also prints the
++    // full advertisement payload as hex on a "RAWADV <MAC> <rssi> <hex>" line, in addition to the normal
++    // parsed output. Opt-in and off by default, so stock behaviour is unchanged.
++    bool bt_raw_dump = false;
+ 
+     bool send_deauth = false;
+ 

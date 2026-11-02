@@ -194,7 +194,7 @@ class MockSerialSource(SerialSource):
             while True:
                 await asyncio.sleep(self._interval)
                 n += 1
-                self._emit(_fake_stream_line(command, n))
+                self._emit(*_fake_stream_lines(command, n))
         except asyncio.CancelledError:
             raise
 
@@ -290,6 +290,40 @@ _STREAMING_VERBS = {
     "gpsdata",
     "nmea",
 }
+
+
+def _fake_stream_lines(command: str, n: int) -> list[str]:
+    """Lines emitted for one stream tick — usually one.
+
+    When the command is a Bluetooth sniff with the custom firmware's ``-raw`` switch
+    (``sniffbt -t airtag -raw``), the plain ``<rssi> <mac>`` line is paired with a synthetic ``RAWADV``
+    line carrying a full (fake) advertisement payload, so the Find My radar's raw-advert decoding can be
+    exercised offline. Stock firmware never emits ``RAWADV``.
+    """
+    primary = _fake_stream_line(command, n)
+    args = command.split()
+    verb = args[0].lower() if args else ""
+    if verb == "sniffbt" and "-raw" in args:
+        rssi, _, mac = primary.partition(" ")  # primary is "<rssi> <mac>"
+        return [primary, f"RAWADV {mac} {rssi} {_fake_adv_hex(n)}"]
+    return [primary]
+
+
+def _fake_adv_hex(n: int) -> str:
+    """A synthetic BLE advertisement payload as hex. Deterministic and entirely fabricated — no real
+    captured advertisement data, so nothing device-identifying ever lands in the repo or tests."""
+    flags = "020106"  # AD: Flags = LE General Discoverable + BR/EDR not supported
+    if n % 2 == 0:
+        # Apple (0x004C) Find My "offline finding" manufacturer data: FF | 4C 00 | 12 | len | status | key
+        key = bytes((n * 7 + i) & 0xFF for i in range(22)).hex()
+        apple = "4c0012" + f"{(len(key) // 2 + 1):02x}" + "00" + key  # type 0x12, len, status, key
+        manuf = f"{(len(apple) // 2 + 1):02x}ff" + apple
+        return flags + manuf
+    # Otherwise a plain named BLE device advertising one 16-bit service UUID (0xFEED).
+    name = f"Tracker-{n:02d}".encode().hex()
+    svc = "0303edfe"  # AD: Complete list of 16-bit Service UUIDs = 0xFEED
+    name_struct = f"{(len(name) // 2 + 1):02x}09" + name  # AD: Complete Local Name
+    return flags + svc + name_struct
 
 
 def _fake_stream_line(command: str, n: int) -> str:
