@@ -3,15 +3,15 @@
  *
  * `rawadv.ts` turns the raw bytes into GAP AD structures (name, services, manufacturer data). This module
  * reads those and classifies the device: the Apple / Find My manufacturer messages (offline-finding
- * trackers, proximity-pairing audio, "nearby" devices), well-known vendors by company id, and well-known
- * beacons/trackers by service UUID. For Find My offline-finding adverts it also decodes the status byte
- * into a battery level and whether the tracker is separated from its owner — the "what's travelling with
- * me" signal.
+ * trackers, iBeacons, proximity-pairing audio, "nearby" devices), well-known vendors by company id, and
+ * well-known beacons/trackers by service UUID. For Find My offline-finding adverts it also decodes the
+ * status byte into a battery level and whether the tracker is separated from its owner — the "what's
+ * travelling with me" signal.
  *
  * Caveat, on purpose: Apple doesn't document these fields. The structure (TLV types, the offline-finding
- * length) is well established from public reverse-engineering, but the finer status-byte bits (battery,
- * "maintained") are a best-effort reading that has shifted across iOS versions, so the UI shows the raw
- * status byte alongside the interpretation rather than hiding it. Everything here is pure.
+ * length, the iBeacon layout) is well established from public reverse-engineering, but the finer
+ * status-byte bits (battery, "maintained") are a best-effort reading that has shifted across iOS
+ * versions, so the UI shows the raw status byte alongside the interpretation. Everything here is pure.
  */
 import type { DecodedAdv } from "@/lib/rawadv";
 
@@ -37,14 +37,24 @@ export interface FindMyStatus {
   separated: boolean;
 }
 
+/** A decoded iBeacon (Apple manufacturer subtype 0x02): a proximity beacon's identity. */
+export interface IBeacon {
+  /** 128-bit proximity UUID, canonical "8-4-4-4-12" form. */
+  uuid: string;
+  major: number;
+  minor: number;
+}
+
 export interface DeviceIdentity {
-  /** Primary human label, e.g. "Find My tracker", "AirPods / Beats", "Tile", "Microsoft". */
+  /** Primary human label, e.g. "Find My tracker", "iBeacon", "AirPods / Beats", "Tile", "Microsoft". */
   label: string;
   /** Manufacturer name when known from the company id, else null. */
   vendor: string | null;
   category: DeviceCategory;
   /** Find My offline-finding status, when this is such an advert; else null. */
   findMy: FindMyStatus | null;
+  /** iBeacon identity, when this is an iBeacon; else null. */
+  ibeacon: IBeacon | null;
   /** Short qualifier shown next to the label, e.g. "separated", "owner nearby", "pairing"; else null. */
   note: string | null;
 }
@@ -111,6 +121,16 @@ function findMyStatus(value: Uint8Array): FindMyStatus | null {
   };
 }
 
+/** Decode an iBeacon TLV (type 0x02): 16-byte UUID, 2-byte major, 2-byte minor (big-endian), 1-byte TX. */
+function iBeaconFrom(value: Uint8Array): IBeacon | null {
+  if (value.length < 20) return null; // 16 UUID + 2 major + 2 minor (TX power optional)
+  return {
+    uuid: formatUuid(value.slice(0, 16)),
+    major: (value[16] << 8) | value[17],
+    minor: (value[18] << 8) | value[19],
+  };
+}
+
 /**
  * Classify a decoded advertisement. Returns null when nothing identifying is present (no vendor, no known
  * service, no Apple message) so the caller can fall back to the device name.
@@ -130,26 +150,39 @@ export function identifyDevice(adv: DecodedAdv | null): DeviceIdentity | null {
         vendor: "Apple",
         category: "tracker",
         findMy,
+        ibeacon: null,
         note: findMy ? (findMy.separated ? "separated" : "owner nearby") : null,
       };
     }
+    const iBeaconTlv = tlvs.find((t) => t.type === 0x02);
+    if (iBeaconTlv) {
+      const ibeacon = iBeaconFrom(iBeaconTlv.value);
+      return {
+        label: "iBeacon",
+        vendor: "Apple",
+        category: "beacon",
+        findMy: null,
+        ibeacon,
+        note: ibeacon ? `major ${ibeacon.major} · minor ${ibeacon.minor}` : null,
+      };
+    }
     if (tlvs.some((t) => t.type === 0x07)) {
-      return { label: "AirPods / Beats", vendor: "Apple", category: "audio", findMy: null, note: "pairing" };
+      return { label: "AirPods / Beats", vendor: "Apple", category: "audio", findMy: null, ibeacon: null, note: "pairing" };
     }
     if (tlvs.some((t) => t.type === 0x10)) {
-      return { label: "Apple device", vendor: "Apple", category: "device", findMy: null, note: "nearby" };
+      return { label: "Apple device", vendor: "Apple", category: "device", findMy: null, ibeacon: null, note: "nearby" };
     }
-    return { label: "Apple device", vendor: "Apple", category: "device", findMy: null, note: null };
+    return { label: "Apple device", vendor: "Apple", category: "device", findMy: null, ibeacon: null, note: null };
   }
 
   // Non-Apple: a known service UUID names the product/class.
   for (const svc of adv.services) {
     const hit = SERVICE_NAMES[svc.toLowerCase()];
-    if (hit) return { label: hit.label, vendor: hit.vendor, category: hit.category, findMy: null, note: null };
+    if (hit) return { label: hit.label, vendor: hit.vendor, category: hit.category, findMy: null, ibeacon: null, note: null };
   }
 
   // Otherwise fall back to a named manufacturer, if any.
-  if (vendor) return { label: vendor, vendor, category: "device", findMy: null, note: null };
+  if (vendor) return { label: vendor, vendor, category: "device", findMy: null, ibeacon: null, note: null };
 
   return null;
 }
@@ -164,4 +197,11 @@ function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(clean.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
   return out;
+}
+
+/** 16 big-endian bytes → canonical "8-4-4-4-12" UUID string. */
+function formatUuid(bytes: Uint8Array): string {
+  let h = "";
+  for (const b of bytes) h += b.toString(16).padStart(2, "0");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }

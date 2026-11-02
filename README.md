@@ -65,19 +65,22 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
 - **Wardrive map (PC-side)** — plots the located access points from a Wigle wardrive CSV on an offline,
   self-contained point map (coloured by signal strength, with per-point details). No map tiles are
   fetched, so your route is never sent anywhere; rows without a GPS fix are skipped.
-- **Find My radar (PC-side)** — under the **Analysis** tab, turns the `sniffbt -t airtag` BLE stream into a live,
-  nearest-first list of detected devices with an estimated distance (from signal strength), a proximity
-  band (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from
-  RSSI is rough by nature, so it leans on bands and trend over false precision; the 1 m reference and
-  environment are adjustable. Parsing only — the ESP32 does the sensing. A **Raw** toggle (on by default)
-  makes Start request the custom raw-capture firmware's advert dump (`sniffbt -t airtag -raw`, see
+- **Find My radar (PC-side)** — under the **Analysis** tab, turns a BLE sniff into a live, nearest-first
+  list of detected devices with an estimated distance (from signal strength), a proximity band
+  (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from RSSI
+  is rough by nature, so it leans on bands and trend over false precision; the 1 m reference and
+  environment are adjustable. Parsing only — the ESP32 does the sensing. A **Scan for** selector picks
+  what to listen for: **Find My** (`sniffbt -t airtag`), **iBeacon**, **Flipper**, **Flock**, or
+  **All BLE** (`recon ble` — every BLE device in range). A **Raw** toggle (on by default) makes Start
+  request the custom raw-capture firmware's advert dump (`… -raw`, see
   [`firmware/custom-rawadv/`](firmware/custom-rawadv)); the radar then also decodes each device's raw BLE
   advertisement and **says what it is** — a Find My tracker (with battery level and whether it's
-  *separated* from its owner or the owner's nearby), AirPods / Beats, a Tile, or a named vendor device —
-  from the Apple (`0x004C`) continuity messages, company id and service UUIDs. Each device shows an
-  identity chip in the list (separated trackers flagged in amber, the "is something following me" case),
-  with the decoded Find My status byte in the homing panel. With stock firmware those raw bytes aren't
-  available (turn Raw off) and the radar works from signal strength alone.
+  *separated* from its owner or the owner's nearby), an iBeacon (UUID / major / minor), AirPods / Beats, a
+  Tile, or a named vendor device — from the Apple (`0x004C`) continuity messages, company id and service
+  UUIDs. Each device shows an identity chip in the list (separated trackers flagged in amber, the "is
+  something following me" case), with the decoded Find My status byte in the homing panel. (`recon ble`
+  doesn't take `-raw` yet, so All BLE reports signal + name without the raw decode.) With stock firmware
+  those raw bytes aren't available (turn Raw off) and the radar works from signal strength alone.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on

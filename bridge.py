@@ -208,10 +208,14 @@ class SerialManager:
         await self.source.write_line(command)
         if self._recorder is not None:
             self._recorder.log("command", command)
-        verb = command.split()[0].lower()
-        if verb == "stopscan":
+        cmd = command.lower().strip()
+        verb = cmd.split()[0] if cmd else ""
+        # `recon` needs its subcommand: "recon ble"/"recon wifi" stream, "recon stop" ends them, and
+        # "recon status" is a one-shot query that leaves the running state untouched — so it can't go in
+        # the first-word STREAMING_PREFIXES tuple.
+        if verb == "stopscan" or cmd.startswith("recon stop"):
             self.running = False
-        elif verb.startswith(STREAMING_PREFIXES):
+        elif verb.startswith(STREAMING_PREFIXES) or cmd.startswith(("recon ble", "recon wifi")):
             self.running = True
         await self.broadcast_status()
 

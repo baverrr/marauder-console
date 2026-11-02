@@ -102,14 +102,25 @@ def test_attack_command_streams(client: TestClient) -> None:
     assert client.get("/api/status").json()["running"] is False
 
 
-@pytest.mark.parametrize("command", ["packetcount", "evilportal -c start", "mactrack", "gpsdata", "nmea"])
+@pytest.mark.parametrize(
+    "command", ["packetcount", "evilportal -c start", "mactrack", "gpsdata", "nmea", "recon ble"]
+)
 def test_new_streaming_commands_set_and_clear_running(client: TestClient, command: str) -> None:
     # Phase 2 added these to the Marauder command set; the bridge must treat them as streaming so the UI
-    # shows Stop and the mock streams canned lines instead of replying "Unknown command".
+    # shows Stop and the mock streams canned lines instead of replying "Unknown command". "recon ble" is
+    # the Find My radar's general-BLE scan mode.
     client.post("/api/connect")
     client.post("/api/command", json={"command": command})
     assert client.get("/api/status").json()["running"] is True
     client.post("/api/stop")
+    assert client.get("/api/status").json()["running"] is False
+
+
+def test_recon_status_is_not_streaming(client: TestClient) -> None:
+    # "recon ble"/"recon wifi" stream, but "recon status" is a one-shot query and "recon stop" ends a
+    # scan — neither should flip the running flag on (the coarse first-word prefix can't tell them apart).
+    client.post("/api/connect")
+    client.post("/api/command", json={"command": "recon status"})
     assert client.get("/api/status").json()["running"] is False
 
 

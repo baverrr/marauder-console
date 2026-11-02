@@ -321,7 +321,7 @@ def _fake_adv_hex(n: int) -> str:
     Cycles through representative device types so the Find My radar's decoding (status byte, battery,
     separated vs owner-nearby, vendor and service classification) is exercised offline."""
     flags = _ad("01", "06")  # Flags = LE General Discoverable + BR/EDR not supported
-    kind = n % 5
+    kind = n % 6
     if kind == 0:
         # Apple Find My "offline finding", SEPARATED (carries a partial key). Vary the status byte so
         # battery level (top 2 bits) and the "maintained" bit (0x04) move across ticks.
@@ -344,6 +344,11 @@ def _fake_adv_hex(n: int) -> str:
         name = f"Surface-{n:02d}".encode().hex()
         ms = "0600" + bytes((n * 3 + i) & 0xFF for i in range(6)).hex()
         return flags + _ad("ff", ms) + _ad("09", name)
+    if kind == 4:
+        # Apple iBeacon: manufacturer subtype 0x02, len 0x15 = UUID(16) + major(2) + minor(2) + TX(1).
+        uuid = bytes((n * 5 + i) & 0xFF for i in range(16)).hex()
+        apple = "0215" + uuid + f"{n % 65536:04x}" + f"{(n * 7) % 65536:04x}" + "c5"
+        return flags + _ad("ff", "4c00" + apple)
     # A Tile tracker: 16-bit service UUID 0xFEED, named.
     name = f"Tile-{n:02d}".encode().hex()
     return flags + _ad("03", "edfe") + _ad("09", name)
@@ -358,6 +363,9 @@ def _fake_stream_line(command: str, n: int) -> str:
         # Real firmware prints a bare "<rssi> <mac>" for BLE sniffs like `sniffbt -t airtag` — match it
         # so the Find My radar sees representative lines in mock mode.
         return f"{rssi} {mac}"
+    if verb == "recon":
+        # General BLE recon ("recon ble"): a labelled sighting the Find My radar can parse for distance.
+        return f"[{n:03d}] {mac}  RSSI {rssi}  name=ReconBLE-{n}"
     if verb in {"blespam", "findmy", "remoteid", "sniffskim", "spoofat"}:
         return f"[{n:03d}] BLE device {mac}  RSSI {rssi}  name=Placeholder-{n}"
     if verb in {"pingscan", "arpscan"}:

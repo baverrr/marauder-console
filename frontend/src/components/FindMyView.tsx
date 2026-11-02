@@ -69,10 +69,30 @@ interface Props {
   lines: ConsoleLine[];
   connected: boolean;
   running: boolean;
-  /** Start a scan. `rawCapture` requests the custom firmware's raw-advert dump (`sniffbt … -raw`). */
-  onStart: (rawCapture: boolean) => void;
+  /** Start a scan with the given board command (built from the selected scan mode and the Raw toggle). */
+  onStart: (command: string) => void;
   onStop: () => void;
 }
+
+/**
+ * Scan modes the radar can drive. `cmd` is the board command; `rawSupported` is whether the custom
+ * firmware's `-raw` advert dump applies (the Find My / sniffbt family — `recon ble` sniffs every BLE
+ * device but doesn't take `-raw` yet, so it gives signal + name only).
+ */
+interface ScanMode {
+  id: string;
+  label: string;
+  cmd: string;
+  rawSupported: boolean;
+  blurb: string;
+}
+const SCAN_MODES: ScanMode[] = [
+  { id: "airtag", label: "Find My", cmd: "sniffbt -t airtag", rawSupported: true, blurb: "Apple Find My / AirTag trackers." },
+  { id: "ibeacon", label: "iBeacon", cmd: "sniffbt -t ibeacon", rawSupported: true, blurb: "iBeacon proximity beacons (UUID / major / minor)." },
+  { id: "flipper", label: "Flipper", cmd: "sniffbt -t flipper", rawSupported: true, blurb: "Flipper Zero devices advertising nearby." },
+  { id: "flock", label: "Flock", cmd: "sniffbt -t flock", rawSupported: true, blurb: "Flock Safety camera beacons." },
+  { id: "all", label: "All BLE", cmd: "recon ble", rawSupported: false, blurb: "Every BLE device in range (general recon)." },
+];
 
 /** Remember the raw-capture preference across reloads; defaults on. Storage may be unavailable. */
 function loadRawPref(): boolean {
@@ -95,6 +115,8 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
   const [sinceId, setSinceId] = useState(-1);
   const [selectedMac, setSelectedMac] = useState<string | null>(null);
   const [rawCapture, setRawCapture] = useState<boolean>(loadRawPref);
+  const [modeId, setModeId] = useState<string>("airtag");
+  const mode = SCAN_MODES.find((m) => m.id === modeId) ?? SCAN_MODES[0];
 
   const toggleRaw = () =>
     setRawCapture((on) => {
@@ -111,9 +133,10 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
   const devices = useMemo(() => buildDevices(lines, calib, sinceId), [lines, calib, sinceId]);
   const selected = selectedMac ? devices.find((d) => d.mac === selectedMac) ?? null : null;
 
+  const rawActive = rawCapture && mode.rawSupported;
   const start = () => {
     setSinceId(lastId);
-    onStart(rawCapture);
+    onStart(mode.cmd + (rawActive ? " -raw" : ""));
   };
 
   return (
@@ -121,27 +144,32 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Radar className="size-5 text-primary" /> Find My — nearby devices
+            <Radar className="size-5 text-primary" /> Find My radar — nearby devices
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Estimates how close each detected Find My / BLE device is from its signal strength. Listed
-            nearest first; move around and watch the trend to home in on one.
+            Listens for nearby BLE devices — Find My trackers by default, or pick another kind below — and
+            estimates how close each is from its signal strength. Listed nearest first; move around and
+            watch the trend to home in on one.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             role="switch"
-            aria-checked={rawCapture}
+            aria-checked={rawActive}
             onClick={toggleRaw}
-            disabled={running}
-            title="Request raw advertisement bytes (sniffbt -raw) so adverts can be decoded. Requires the custom raw-capture firmware; applies to the next scan."
+            disabled={running || !mode.rawSupported}
+            title={
+              mode.rawSupported
+                ? "Request raw advertisement bytes (sniffbt -raw) so adverts can be decoded and devices identified. Requires the custom raw-capture firmware; applies to the next scan."
+                : `${mode.label} doesn't support raw capture yet — it reports signal and name only.`
+            }
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
-              rawCapture ? "bg-primary/15 text-primary" : "text-foreground/80 hover:bg-secondary/60",
+              rawActive ? "bg-primary/15 text-primary" : "text-foreground/80 hover:bg-secondary/60",
             )}
           >
-            <Tag className="size-3" /> Raw {rawCapture ? "on" : "off"}
+            <Tag className="size-3" /> Raw {rawActive ? "on" : "off"}
           </button>
           {running ? (
             <Button variant="outline" size="sm" onClick={onStop}>
@@ -149,7 +177,7 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
             </Button>
           ) : (
             <Button size="sm" onClick={start} disabled={!connected} title={connected ? "" : "Connect a board first"}>
-              <Play className="fill-current" /> Start Find My
+              <Play className="fill-current" /> Start {mode.label}
             </Button>
           )}
           <Button variant="ghost" size="sm" onClick={() => setSinceId(lastId)} title="Clear detected devices">
@@ -157,6 +185,28 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
           </Button>
         </div>
       </header>
+
+      {/* Scan mode: what kind of device to listen for. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-card/40 p-3 text-sm">
+        <span className="text-muted-foreground">Scan for</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {SCAN_MODES.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setModeId(m.id)}
+              disabled={running}
+              title={m.blurb}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs transition-colors disabled:opacity-50",
+                m.id === modeId ? "bg-primary/15 text-primary" : "text-foreground/80 hover:bg-secondary/60",
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">{mode.blurb}</span>
+      </div>
 
       <p className="rounded-md border border-border bg-background/40 p-2.5 text-xs text-muted-foreground">
         Distance is estimated from signal strength, so treat it as rough — easily off by several metres
@@ -208,10 +258,10 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
       {devices.length === 0 ? (
         <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           {running
-            ? "Listening… no Find My devices in range yet. Move around — nearby trackers will appear here."
+            ? `Listening… no ${mode.label} devices in range yet. Move around — nearby devices will appear here.`
             : connected
-              ? "Start Find My to begin listening for nearby devices."
-              : "Connect a board, then start Find My."}
+              ? `Start ${mode.label} to begin listening for nearby devices.`
+              : `Connect a board, then start ${mode.label}.`}
         </div>
       ) : (
         <ul className="flex flex-col gap-1.5">
@@ -298,6 +348,10 @@ function AdvDetails({ adv }: { adv: DecodedAdv }) {
   const id = identifyDevice(adv);
   const rows: { label: string; value: string }[] = [];
   if (id) rows.push({ label: "Device", value: id.note ? `${id.label} · ${id.note}` : id.label });
+  if (id?.ibeacon) {
+    rows.push({ label: "iBeacon UUID", value: id.ibeacon.uuid });
+    rows.push({ label: "Major / Minor", value: `${id.ibeacon.major} / ${id.ibeacon.minor}` });
+  }
   if (id?.findMy) {
     const fm = id.findMy;
     rows.push({ label: "Owner state", value: fm.separated ? "Separated (findable, away from owner)" : "Owner nearby" });
