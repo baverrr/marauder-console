@@ -433,7 +433,7 @@ ESP32 Marauder project. "ESP32 Marauder" and related names belong to their respe
 - **Terms and Conditions:** [TERMS.md](TERMS.md): how you may operate the app, the **authorised-use** and
   legal-compliance requirements for a transmitting security tool, no-warranty and liability terms.
 - **Privacy Policy:** [PRIVACY.md](PRIVACY.md): the app runs entirely on your own computer, collects nothing,
-  and sends nothing to the author. The optional assistant sends your chat (and the read-only context it
+  and sends nothing to the author. Session transcripts are kept in `~/.local/share/marauder-console`. The optional assistant sends your chat (and the read-only context it
   looks up) to Anthropic with your own API key.
 - **Third-party notices:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): the bundled ESP32 Marauder
   firmware (MIT) and the `esptool` flashing tool (GPL-2.0, installed on demand, not redistributed).
