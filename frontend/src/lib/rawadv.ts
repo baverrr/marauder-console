@@ -33,7 +33,7 @@ export interface AdStructure {
 }
 
 /** What kind of Apple advertisement this is, when the manufacturer is Apple (`0x004C`). */
-export type AppleKind = "offline-finding" | "nearby" | "apple-other";
+export type AppleKind = "offline-finding" | "nearby" | "proximity-pairing" | "apple-other";
 
 /** A decoded advertisement: the useful fields pulled out, plus every raw AD structure. */
 export interface DecodedAdv {
@@ -158,10 +158,12 @@ export function decodeAdv(payload: Uint8Array): DecodedAdv {
   let appleKind: AppleKind | null = null;
   if (isApple) {
     // Apple manufacturer data is a sequence of {type, length, …} entries after the company id. The first
-    // type byte tells the flavour: 0x12 is Find My / offline finding, 0x07 is "nearby" (proximity
-    // pairing, e.g. a just-separated AirTag), anything else is some other Apple continuity message.
+    // type byte tells the flavour: 0x12 is Find My / offline finding, 0x10 is "nearby" (an Apple device
+    // near its owner), 0x07 is proximity pairing (AirPods / Beats); anything else is some other Apple
+    // continuity message. deviceid.ts walks the full TLV sequence for a finer classification.
     const first = manufacturerHex && manufacturerHex.length >= 2 ? parseInt(manufacturerHex.slice(0, 2), 16) : null;
-    appleKind = first === 0x12 ? "offline-finding" : first === 0x07 ? "nearby" : "apple-other";
+    appleKind =
+      first === 0x12 ? "offline-finding" : first === 0x10 ? "nearby" : first === 0x07 ? "proximity-pairing" : "apple-other";
   }
 
   return {

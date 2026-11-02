@@ -309,21 +309,44 @@ def _fake_stream_lines(command: str, n: int) -> list[str]:
     return [primary]
 
 
+def _ad(ad_type: str, data_hex: str) -> str:
+    """One GAP AD structure as hex: length (type + data) | type | data."""
+    return f"{(len(data_hex) // 2 + 1):02x}{ad_type}{data_hex}"
+
+
 def _fake_adv_hex(n: int) -> str:
     """A synthetic BLE advertisement payload as hex. Deterministic and entirely fabricated — no real
-    captured advertisement data, so nothing device-identifying ever lands in the repo or tests."""
-    flags = "020106"  # AD: Flags = LE General Discoverable + BR/EDR not supported
-    if n % 2 == 0:
-        # Apple (0x004C) Find My "offline finding" manufacturer data: FF | 4C 00 | 12 | len | status | key
-        key = bytes((n * 7 + i) & 0xFF for i in range(22)).hex()
-        apple = "4c0012" + f"{(len(key) // 2 + 1):02x}" + "00" + key  # type 0x12, len, status, key
-        manuf = f"{(len(apple) // 2 + 1):02x}ff" + apple
-        return flags + manuf
-    # Otherwise a plain named BLE device advertising one 16-bit service UUID (0xFEED).
-    name = f"Tracker-{n:02d}".encode().hex()
-    svc = "0303edfe"  # AD: Complete list of 16-bit Service UUIDs = 0xFEED
-    name_struct = f"{(len(name) // 2 + 1):02x}09" + name  # AD: Complete Local Name
-    return flags + svc + name_struct
+    captured advertisement data, so nothing device-identifying ever lands in the repo or tests.
+
+    Cycles through representative device types so the Find My radar's decoding (status byte, battery,
+    separated vs owner-nearby, vendor and service classification) is exercised offline."""
+    flags = _ad("01", "06")  # Flags = LE General Discoverable + BR/EDR not supported
+    kind = n % 5
+    if kind == 0:
+        # Apple Find My "offline finding", SEPARATED (carries a partial key). Vary the status byte so
+        # battery level (top 2 bits) and the "maintained" bit (0x04) move across ticks.
+        battery = n % 4  # 0 full … 3 critical
+        maintained = 0x04 if (n // 4) % 2 else 0x00
+        status = (battery << 6) | maintained
+        key = bytes((n * 7 + i) & 0xFF for i in range(24)).hex()  # 24 bytes → value len 0x19 (separated)
+        apple = f"12{(len(key) // 2 + 1):02x}{status:02x}{key}"  # type 0x12 | len | status | key
+        return flags + _ad("ff", "4c00" + apple)
+    if kind == 1:
+        # Apple Find My, OWNER NEARBY (short payload: just a status byte, no key).
+        apple = f"1202{(n % 4) << 6:02x}00"  # type 0x12 | len 0x02 | status | 1 byte
+        return flags + _ad("ff", "4c00" + apple)
+    if kind == 2:
+        # Apple proximity pairing (AirPods / Beats): type 0x07.
+        apple = "071901" + bytes((n + i) & 0xFF for i in range(24)).hex()[:48]
+        return flags + _ad("ff", "4c00" + apple)
+    if kind == 3:
+        # Microsoft (0x0006) manufacturer data (e.g. Swift Pair), named device.
+        name = f"Surface-{n:02d}".encode().hex()
+        ms = "0600" + bytes((n * 3 + i) & 0xFF for i in range(6)).hex()
+        return flags + _ad("ff", ms) + _ad("09", name)
+    # A Tile tracker: 16-bit service UUID 0xFEED, named.
+    name = f"Tile-{n:02d}".encode().hex()
+    return flags + _ad("03", "edfe") + _ad("09", name)
 
 
 def _fake_stream_line(command: str, n: int) -> str:
