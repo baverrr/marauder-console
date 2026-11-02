@@ -69,7 +69,11 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   nearest-first list of detected devices with an estimated distance (from signal strength), a proximity
   band (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from
   RSSI is rough by nature, so it leans on bands and trend over false precision; the 1 m reference and
-  environment are adjustable. Parsing only — the ESP32 does the sensing.
+  environment are adjustable. Parsing only — the ESP32 does the sensing. With the optional raw-capture
+  firmware (`sniffbt -t airtag -raw`, see [`firmware/custom-rawadv/`](firmware/custom-rawadv)) the radar
+  also decodes each device's raw BLE advertisement — real local name, Apple (`0x004C`) Find My status,
+  service UUIDs and flags — shown in the homing panel; with stock firmware those raw bytes aren't
+  available and the radar works from signal strength alone.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on
@@ -283,6 +287,13 @@ bash scripts/flash-firmware.sh --port /dev/ttyUSB0
 The flasher verifies each file's `sha256`, won't run while the serial port is busy, does a read-only check
 and asks for confirmation before writing. See [`firmware/`](firmware/) (binaries, `manifest.json`, upstream
 license) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+> [!NOTE]
+> **Optional raw BLE capture.** The bundled firmware only prints parsed BLE fields. If you want the raw
+> advertisement bytes (to decode names, Apple Find My data and service UUIDs in the radar), a small opt-in
+> source patch adds a `sniffbt -t airtag -raw` command — build and flash instructions are in
+> [`firmware/custom-rawadv/`](firmware/custom-rawadv). That's a firmware you build yourself; the bundled
+> binaries stay byte-for-byte upstream and are untouched.
 
 ## License & legal
 

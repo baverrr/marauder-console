@@ -224,6 +224,37 @@ async def test_mock_source_streams_until_stop() -> None:
     assert any("mock" in line.lower() for line in received)
 
 
+def test_sniffbt_raw_emits_decodable_rawadv_lines() -> None:
+    # The custom firmware's `-raw` switch adds a "RAWADV <MAC> <rssi> <hex>" line next to the plain
+    # sniff line; the mock mirrors that so the Find My radar's decoder can be exercised offline.
+    from serial_source import _fake_adv_hex, _fake_stream_lines
+
+    # Without -raw: a single plain "<rssi> <mac>" line, no raw dump.
+    plain = _fake_stream_lines("sniffbt -t airtag", 2)
+    assert len(plain) == 1
+    assert not plain[0].startswith("RAWADV")
+
+    # With -raw: the plain line plus a well-formed RAWADV line for the same device.
+    pair = _fake_stream_lines("sniffbt -t airtag -raw", 2)
+    assert len(pair) == 2
+    raw = pair[1]
+    assert raw.startswith("RAWADV ")
+    _, mac, rssi, hexpayload = raw.split()
+    # RFC 7042 documentation MAC range — never a real device — and the same device as the plain line.
+    assert mac.lower().startswith("00:00:5e:00:53:")
+    assert mac in pair[0]
+    assert int(rssi) < 0
+    assert len(hexpayload) > 0 and len(hexpayload) % 2 == 0
+    bytes.fromhex(hexpayload)  # valid hex
+
+    # Deterministic and fabricated: even n is an Apple (0x004C) Find My advert, odd n a named device.
+    apple = _fake_adv_hex(2)
+    assert "ff4c0012" in apple  # Manufacturer Specific Data, Apple company id, Find My subtype
+    named = _fake_adv_hex(3)
+    assert named.startswith("020106")  # Flags AD structure
+    assert "09" in named  # Complete Local Name AD type
+
+
 def test_ws_rejects_a_disallowed_origin(client: TestClient) -> None:
     # CORS doesn't cover WS upgrades, so /ws must reject a foreign Origin (a malicious web page) itself.
     import contextlib

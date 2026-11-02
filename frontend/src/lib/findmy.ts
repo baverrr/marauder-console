@@ -8,6 +8,7 @@
  * the view can rebuild the device list from the console buffer on every render.
  */
 import type { ConsoleLine } from "@/lib/bridge";
+import { parseRawAdvLine, decodeAdv, type DecodedAdv } from "@/lib/rawadv";
 
 /** How close a device is, from its (smoothed) signal. Honest about RSSI's imprecision. */
 export type ProximityBand = "immediate" | "near" | "far";
@@ -48,6 +49,12 @@ export interface FindMyDevice {
   trend: Trend;
   /** Console line id of the most recent sighting (recency / tie-break). */
   lastId: number;
+  /**
+   * Latest decoded raw advertisement for this device, when the firmware was asked for it
+   * (`sniffbt -t airtag -raw`) and emitted a `RAWADV` line. null with stock firmware, which never
+   * surfaces the raw bytes.
+   */
+  adv: DecodedAdv | null;
 }
 
 const MAC_RE = /([0-9a-f]{2}(?::[0-9a-f]{2}){5})/i;
@@ -67,6 +74,9 @@ const EWMA_ALPHA = 0.35;
  * ("RSSI -63", "rssi:-63", "-63 dBm").
  */
 export function parseBleLine(text: string): { mac: string; rssi: number; name: string | null } | null {
+  // The custom firmware's raw-dump line ("RAWADV <MAC> <rssi> <hex>") is handled by parseRawAdvLine and
+  // decoded separately; skip it here so its trailing hex can never be misread as a sighting.
+  if (/\bRAWADV\b/i.test(text)) return null;
   const mac = text.match(MAC_RE)?.[1];
   if (!mac) return null;
   const rssiStr =
@@ -105,16 +115,32 @@ export function signalBars(rssi: number): number {
  * so Start/Clear can reset the view without touching the shared buffer.
  */
 export function buildDevices(lines: ConsoleLine[], calib: Calibration, sinceId = -1): FindMyDevice[] {
-  const byMac = new Map<string, { rssis: number[]; name: string | null; lastId: number }>();
+  const byMac = new Map<
+    string,
+    { rssis: number[]; name: string | null; lastId: number; adv: DecodedAdv | null }
+  >();
+  const ensure = (mac: string, id: number) => {
+    let entry = byMac.get(mac);
+    if (!entry) {
+      entry = { rssis: [], name: null, lastId: id, adv: null };
+      byMac.set(mac, entry);
+    }
+    return entry;
+  };
   for (const { id, text } of lines) {
     if (id <= sinceId) continue;
+    // A raw-dump line enriches an existing sighting with decoded fields; it doesn't add an RSSI sample,
+    // since the firmware also prints the plain "<rssi> <mac>" line for the same advert (parsed below).
+    const raw = parseRawAdvLine(text);
+    if (raw) {
+      const entry = ensure(raw.mac, id);
+      entry.adv = decodeAdv(raw.payload);
+      entry.lastId = id;
+      continue;
+    }
     const hit = parseBleLine(text);
     if (!hit) continue;
-    let entry = byMac.get(hit.mac);
-    if (!entry) {
-      entry = { rssis: [], name: null, lastId: id };
-      byMac.set(hit.mac, entry);
-    }
+    const entry = ensure(hit.mac, id);
     entry.rssis.push(hit.rssi);
     if (hit.name) entry.name = hit.name;
     entry.lastId = id;
@@ -122,11 +148,16 @@ export function buildDevices(lines: ConsoleLine[], calib: Calibration, sinceId =
 
   const devices: FindMyDevice[] = [];
   for (const [mac, entry] of byMac) {
+    // A device known only from a RAWADV line (no plain sighting yet) has no RSSI samples to rank or
+    // estimate distance from, so skip it until a sighting arrives.
+    if (entry.rssis.length === 0) continue;
     const rssi = ewma(entry.rssis);
     const distanceM = estimateDistance(rssi, calib);
     devices.push({
       mac,
-      name: entry.name,
+      // Prefer a complete local name decoded from the raw advert over the (usually absent) name on the
+      // plain sniff line.
+      name: entry.adv?.name ?? entry.name,
       rssi: Math.round(rssi),
       rawRssi: entry.rssis[entry.rssis.length - 1],
       samples: entry.rssis.length,
@@ -134,6 +165,7 @@ export function buildDevices(lines: ConsoleLine[], calib: Calibration, sinceId =
       band: bandFor(distanceM),
       trend: trendOf(entry.rssis),
       lastId: entry.lastId,
+      adv: entry.adv,
     });
   }
   // Nearest first; ties broken by most-recently-seen.
