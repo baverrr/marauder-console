@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   Radar, ArrowUp, ArrowDown, Minus, Crosshair, Play, Square, Eraser, X, Tag,
-  Headphones, Smartphone, RadioTower, MapPin, HelpCircle, type LucideIcon,
+  Headphones, Smartphone, RadioTower, MapPin, HelpCircle, Cctv, type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
 import { bytesToHex, type DecodedAdv } from "@/lib/rawadv";
 import {
   identifyDevice,
+  identifyCameraByName,
   batteryLabel,
   type DeviceIdentity,
   type DeviceCategory,
@@ -31,6 +32,7 @@ const CATEGORY_ICON: Record<DeviceCategory, LucideIcon> = {
   audio: Headphones,
   device: Smartphone,
   beacon: RadioTower,
+  camera: Cctv,
   unknown: HelpCircle,
 };
 
@@ -47,14 +49,21 @@ function IdentityChip({ id }: { id: DeviceIdentity }) {
   const Icon = CATEGORY_ICON[id.category];
   // A separated Find My tracker is the one worth flagging (it may be travelling with you), so tint it amber.
   const separated = id.findMy?.separated ?? false;
+  // A camera is the attention-grabbing case for a privacy sweep, so tint it rose.
+  const camera = id.category === "camera";
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-        separated ? "bg-amber-500/15 text-amber-300" : "bg-primary/15 text-primary",
+        camera
+          ? "bg-rose-500/15 text-rose-300"
+          : separated
+            ? "bg-amber-500/15 text-amber-300"
+            : "bg-primary/15 text-primary",
       )}
     >
       <Icon className="size-2.5" /> {id.label}
+      {id.confidence && <span className="opacity-70">· {id.confidence}</span>}
       {id.note && <span className="opacity-70">· {id.note}</span>}
       {id.findMy && (
         <span className={cn("opacity-90", BATTERY_CLASS[id.findMy.battery])}>
@@ -91,6 +100,7 @@ const SCAN_MODES: ScanMode[] = [
   { id: "ibeacon", label: "iBeacon", cmd: "sniffbt -t ibeacon", rawSupported: true, blurb: "iBeacon proximity beacons (UUID / major / minor)." },
   { id: "flipper", label: "Flipper", cmd: "sniffbt -t flipper", rawSupported: true, blurb: "Flipper Zero devices advertising nearby." },
   { id: "flock", label: "Flock", cmd: "sniffbt -t flock", rawSupported: true, blurb: "Flock Safety camera beacons." },
+  { id: "camera", label: "Cameras", cmd: "recon ble", rawSupported: true, blurb: "Nearby cameras — scans all BLE and flags devices whose advertised name matches a camera brand (plus Flock beacons). Turn Raw on for names." },
   { id: "all", label: "All BLE", cmd: "recon ble", rawSupported: true, blurb: "Every BLE device in range (general recon)." },
 ];
 
@@ -265,7 +275,11 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
         </div>
       ) : (
         <ul className="flex flex-col gap-1.5">
-          {devices.map((d) => (
+          {devices.map((d) => {
+            // Prefer the decoded advert; fall back to the plain sighting name so cameras are still flagged
+            // when raw capture is off (e.g. `recon ble` emits a name but no advert bytes).
+            const id = identifyDevice(d.adv) ?? identifyCameraByName(d.name);
+            return (
             <li key={d.mac}>
               <button
                 onClick={() => setSelectedMac(d.mac === selectedMac ? null : d.mac)}
@@ -280,7 +294,7 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">{d.name ?? "Unknown device"}</span>
-                    {identifyDevice(d.adv) && <IdentityChip id={identifyDevice(d.adv)!} />}
+                    {id && <IdentityChip id={id} />}
                   </div>
                   <div className="truncate font-mono text-xs text-muted-foreground">{d.mac}</div>
                 </div>
@@ -294,7 +308,8 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
                 <TrendIcon trend={d.trend} />
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>
@@ -347,7 +362,10 @@ function HomingPanel({ device, onClose, onCalibrate }: { device: FindMyDevice; o
 function AdvDetails({ adv }: { adv: DecodedAdv }) {
   const id = identifyDevice(adv);
   const rows: { label: string; value: string }[] = [];
-  if (id) rows.push({ label: "Device", value: id.note ? `${id.label} · ${id.note}` : id.label });
+  if (id) {
+    const qual = id.note ?? (id.confidence ? `${id.confidence} confidence` : null);
+    rows.push({ label: "Device", value: qual ? `${id.label} · ${qual}` : id.label });
+  }
   if (id?.ibeacon) {
     rows.push({ label: "iBeacon UUID", value: id.ibeacon.uuid });
     rows.push({ label: "Major / Minor", value: `${id.ibeacon.major} / ${id.ibeacon.minor}` });
