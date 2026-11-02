@@ -1,8 +1,18 @@
 diff --git a/esp32_marauder/CommandLine.cpp b/esp32_marauder/CommandLine.cpp
-index d2c0c24..46fb71d 100644
+index d2c0c24..925ac5a 100644
 --- a/esp32_marauder/CommandLine.cpp
 +++ b/esp32_marauder/CommandLine.cpp
-@@ -1364,6 +1364,11 @@ void CommandLine::runCommand(String input) {
+@@ -415,6 +415,9 @@ void CommandLine::runCommand(String input) {
+       }
+       #ifdef HAS_BT
+         else if (cmd_args.get(1) == "ble") {
++          // Marauder Console patch: `-raw` opts into the RAWADV advertisement dump for recon's BLE scan
++          // (recon BLE runs BT_SCAN_ALL, so it shares the sniffbt callback). Off unless asked.
++          wifi_scan_obj.bt_raw_dump = (this->argSearch(&cmd_args, "-raw") != -1);
+           if (recon_obj.start(ReconMode::BLE_RECON)) Serial.println(F("active"));
+         }
+       #endif
+@@ -1364,6 +1367,11 @@ void CommandLine::runCommand(String input) {
        #ifdef HAS_BT
          int bt_type_sw = this->argSearch(&cmd_args, "-t");
  
@@ -15,7 +25,7 @@ index d2c0c24..46fb71d 100644
          if (bt_type_sw != -1) {
            String bt_type = cmd_args.get(bt_type_sw + 1);
 diff --git a/esp32_marauder/WiFiScan.cpp b/esp32_marauder/WiFiScan.cpp
-index 198530d..4fa6af9 100644
+index 198530d..9436a12 100644
 --- a/esp32_marauder/WiFiScan.cpp
 +++ b/esp32_marauder/WiFiScan.cpp
 @@ -542,6 +542,22 @@ extern "C" {
@@ -41,6 +51,92 @@ index 198530d..4fa6af9 100644
                //Serial.print(F("Payload Len: "));
                //Serial.print(len);
                //Serial.println("\n");
+@@ -628,6 +644,20 @@ extern "C" {
+               Serial.println(mac);
+               Serial.print(F("Name: "));
+               Serial.println(name);
++              // Marauder Console patch: opt-in raw advertisement dump (same "RAWADV <MAC> <rssi> <hex>"
++              // line as the AirTag branch) so the console can decode Flipper adverts when `-raw` is passed.
++              if (wifi_scan_obj.bt_raw_dump) {
++                Serial.print(F("RAWADV "));
++                Serial.print(mac);
++                Serial.print(' ');
++                Serial.print(rssi);
++                Serial.print(' ');
++                for (size_t i = 0; i < len; i++) {
++                  if (payLoad[i] < 0x10) Serial.print('0');
++                  Serial.print(payLoad[i], HEX);
++                }
++                Serial.println();
++              }
+ 
+               Flipper flipper;
+               flipper.mac = mac;
+@@ -720,7 +750,23 @@ extern "C" {
+                 display_string.concat(screenMac(advertisedDevice->getAddress().toString().c_str()));
+                 Serial.print(advertisedDevice->getAddress().toString().c_str());
+               }
+-      
++              // Marauder Console patch: opt-in raw advertisement dump for BT_SCAN_ALL / iBeacon (and
++              // `recon ble`, which runs BT_SCAN_ALL). This branch prints the device line without a trailing
++              // newline on non-screen builds, so terminate it first, then emit a standalone "RAWADV" line.
++              if (wifi_scan_obj.bt_raw_dump) {
++                Serial.println();
++                Serial.print(F("RAWADV "));
++                Serial.print(mac);
++                Serial.print(' ');
++                Serial.print(rssi);
++                Serial.print(' ');
++                for (size_t i = 0; i < len; i++) {
++                  if (payLoad[i] < 0x10) Serial.print('0');
++                  Serial.print(payLoad[i], HEX);
++                }
++                Serial.println();
++              }
++
+               #ifdef HAS_SCREEN
+                 uint8_t temp_len = display_string.length();
+                 for (uint8_t i = 0; i < 40 - temp_len; i++)
+@@ -940,6 +986,19 @@ extern "C" {
+               Serial.println(name);
+               Serial.print(F("  Serial: "));
+               Serial.println(serial.length() ? serial : "N/A");
++              // Marauder Console patch: opt-in raw advertisement dump (same "RAWADV" line) for Flock scan.
++              if (wifi_scan_obj.bt_raw_dump) {
++                Serial.print(F("RAWADV "));
++                Serial.print(mac);
++                Serial.print(' ');
++                Serial.print(rssi);
++                Serial.print(' ');
++                for (size_t i = 0; i < len; i++) {
++                  if (payLoad[i] < 0x10) Serial.print('0');
++                  Serial.print(payLoad[i], HEX);
++                }
++                Serial.println();
++              }
+ 
+               //Serial.print(F("  Payload: "));
+               //for (size_t i = 0; i < len; i++) {
+@@ -1119,6 +1178,19 @@ extern "C" {
+                   display_string.concat(screenMac(advertisedDevice->getAddress().toString().c_str()));
+                   Serial.println(advertisedDevice->getAddress().toString().c_str());
+                 }
++                // Marauder Console patch: opt-in raw advertisement dump (same "RAWADV" line) for Meta scan.
++                if (wifi_scan_obj.bt_raw_dump) {
++                  Serial.print(F("RAWADV "));
++                  Serial.print(mac);
++                  Serial.print(' ');
++                  Serial.print(rssi);
++                  Serial.print(' ');
++                  for (size_t i = 0; i < len; i++) {
++                    if (payLoad[i] < 0x10) Serial.print('0');
++                    Serial.print(payLoad[i], HEX);
++                  }
++                  Serial.println();
++                }
+ 
+                 #ifdef HAS_SCREEN
+                   uint8_t temp_len = display_string.length();
 diff --git a/esp32_marauder/WiFiScan.h b/esp32_marauder/WiFiScan.h
 index 47d1d45..aca80b8 100644
 --- a/esp32_marauder/WiFiScan.h
