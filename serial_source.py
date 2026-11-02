@@ -174,6 +174,17 @@ class MockSerialSource(SerialSource):
             await self._stop_stream()
             self._emit("Stopping scan...", "> ")
             return
+        if verb == "lensfind":
+            # Custom lens-finder firmware: it only drives the board's LED, so there's nothing to stream —
+            # just the start/stop acknowledgement the real firmware prints.
+            if command.lower().split()[1:2] == ["stop"]:
+                self._emit("Lens finder stopped")
+            else:
+                self._emit(
+                    "Lens finder: red, strobing at 4 Hz (mock). "
+                    "Stop with stopscan, lensfind stop or a screen tap"
+                )
+            return
         if verb in _STATIC_RESPONSES:
             self._emit(*_STATIC_RESPONSES[verb])
             return

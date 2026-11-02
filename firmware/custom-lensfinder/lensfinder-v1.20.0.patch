@@ -1,0 +1,355 @@
+diff --git a/esp32_marauder/CommandLine.cpp b/esp32_marauder/CommandLine.cpp
+index d2c0c24..a8158af 100644
+--- a/esp32_marauder/CommandLine.cpp
++++ b/esp32_marauder/CommandLine.cpp
+@@ -270,6 +270,11 @@ void CommandLine::runCommand(String input) {
+     Serial.println("#" + input);
+ 
+   LinkedList<String> cmd_args = this->parseCommand(input, " ");
++
++  // Marauder Console patch: the lens finder owns the status LED and the screen, so any other command
++  // ends it first (stopscan included). `lensfind` itself handles restarts and `lensfind stop`.
++  if (lens_finder.active() && cmd_args.get(0) != LENSFIND_CMD)
++    lens_finder.stop();
+   
+   //// Admin commands
+   // Help
+@@ -291,6 +296,7 @@ void CommandLine::runCommand(String input) {
+     #endif
+     // GCOVR_EXCL_STOP
+     Serial.println(HELP_LED_CMD);
++    Serial.println(HELP_LENSFIND_CMD);
+     Serial.println(HELP_GPS_DATA_CMD);
+     Serial.println(HELP_GPS_CMD);
+     Serial.println(HELP_NMEA_CMD);
+@@ -543,6 +549,41 @@ void CommandLine::runCommand(String input) {
+       }
+     #endif
+   }
++  // Marauder Console patch: optical lens finder — strobe the status LED to spot camera-lens glints.
++  else if (cmd_args.get(0) == LENSFIND_CMD) {
++    if (cmd_args.size() > 1 && cmd_args.get(1) == "stop") {
++      if (lens_finder.active()) lens_finder.stop();
++      else Serial.println(F("Lens finder is not running"));
++    }
++    else if (wifi_scan_obj.scanning()) {
++      Serial.println(F("Stop the current scan before starting the lens finder"));
++    }
++    else {
++      int rate_arg = this->argSearch(&cmd_args, "-r");
++      bool steady = this->argSearch(&cmd_args, "-s") != -1;
++      bool white = this->argSearch(&cmd_args, "-w") != -1;
++      int hz = LensFinder::DEFAULT_HZ;
++      if (rate_arg != -1 && rate_arg + 1 < cmd_args.size())
++        hz = cmd_args.get(rate_arg + 1).toInt();
++      if (!steady && (hz < LensFinder::MIN_HZ || hz > LensFinder::MAX_HZ)) {
++        Serial.println(HELP_LENSFIND_CMD);
++      }
++      else if (!lens_finder.start(steady ? 0 : hz, white)) {
++        Serial.println(F("Lens finder needs a board with an RGB status LED"));
++      }
++      else {
++        Serial.print(F("Lens finder: "));
++        Serial.print(white ? F("white") : F("red"));
++        if (steady) Serial.print(F(", steady"));
++        else {
++          Serial.print(F(", strobing at "));
++          Serial.print(hz);
++          Serial.print(F(" Hz"));
++        }
++        Serial.println(F(". Stop with stopscan, lensfind stop or a screen tap"));
++      }
++    }
++  }
+   // ls command
+   else if (cmd_args.get(0) == LS_CMD) {
+     #ifdef HAS_SD
+diff --git a/esp32_marauder/CommandLine.h b/esp32_marauder/CommandLine.h
+index 30c75d7..dd0574b 100644
+--- a/esp32_marauder/CommandLine.h
++++ b/esp32_marauder/CommandLine.h
+@@ -17,6 +17,7 @@
+ #endif
+ #include "settings.h"
+ #include "ReconMission.h"
++#include "LensFinder.h"  // Marauder Console patch: optical lens finder
+ #if defined(HAS_CSI_MOTION)
+   #include "CsiMotionMonitor.h"
+ #endif
+@@ -36,6 +37,7 @@ extern WiFiScan wifi_scan_obj;
+ #endif
+ extern Settings settings_obj;
+ extern ReconMission recon_obj;
++extern LensFinder lens_finder;  // Marauder Console patch
+ #if defined(HAS_CSI_MOTION)
+   extern CsiMotionMonitor csi_motion_obj;
+ #endif
+@@ -69,6 +71,7 @@ const char PROGMEM BACKUP_SPIFFS_CMD[] = "backupspiffs";
+ const char PROGMEM BACKUP_STATUS_CMD[] = "backupstatus";
+ const char PROGMEM RESTORE_SPIFFS_CMD[] = "restorespiffs";
+ const char PROGMEM LED_CMD[] = "led";
++const char PROGMEM LENSFIND_CMD[] = "lensfind";  // Marauder Console patch
+ const char PROGMEM GPS_DATA_CMD[] = "gpsdata";
+ const char PROGMEM GPS_CMD[] = "gps";
+ const char PROGMEM NMEA_CMD[] = "nmea";
+@@ -154,6 +157,7 @@ const char PROGMEM HELP_BACKUP_SPIFFS_CMD[] = "backupspiffs [--machine <transact
+ const char PROGMEM HELP_BACKUP_STATUS_CMD[] = "backupstatus [--machine <transaction-id>] - inspect /spiffs on SD";
+ const char PROGMEM HELP_RESTORE_SPIFFS_CMD[] = "restorespiffs [--machine <transaction-id>] - restore SPIFFS from /spiffs on SD";
+ const char PROGMEM HELP_LED_CMD[] = "led -s <hex color>/-p <rainbow>";
++const char PROGMEM HELP_LENSFIND_CMD[] = "lensfind [-r <1-20 Hz>/-s] [-w] / lensfind stop";  // Marauder Console patch
+ const char PROGMEM HELP_GPS_DATA_CMD[] = "gpsdata";
+ const char PROGMEM HELP_GPS_CMD[] = "gps [-t] [-g] <fix/sat/lon/lat/alt/date/accuracy/text/nmea>\r\n    [-n] <native/all/gps/glonass/galileo/navic/qzss/beidou>\r\n         [-b = use BD vs GB for beidou]";
+ const char PROGMEM HELP_GPS_POI_CMD[] = "gpspoi -s/-m/-e";
+diff --git a/esp32_marauder/LensFinder.cpp b/esp32_marauder/LensFinder.cpp
+new file mode 100644
+index 0000000..6c72506
+--- /dev/null
++++ b/esp32_marauder/LensFinder.cpp
+@@ -0,0 +1,143 @@
++#include "LensFinder.h"
++
++#ifdef HAS_SCREEN
++  #include "Display.h"
++  #include "MenuFunctions.h"
++  extern Display display_obj;
++  extern MenuFunctions menu_function_obj;
++  extern void backlightOn();
++  extern void backlightOff();
++#endif
++
++// Keep the instructions up this long, then turn the backlight off so the screen doesn't wash out the
++// operator's dark-adapted eye (and the glints they're looking for).
++static const uint32_t LENS_FINDER_SCREEN_MS = 5000;
++
++bool LensFinder::start(uint8_t hz, bool white) {
++  #ifdef HAS_FLIPPER_LED
++    if (hz > MAX_HZ) hz = MAX_HZ;
++    #ifdef HAS_SCREEN
++      if (this->running && this->screen_dark) backlightOn();  // restarted with new settings
++    #endif
++    this->hz = hz;
++    this->white = white;
++    this->running = true;
++    this->screen_dark = false;
++    this->touch_armed = false;
++    this->stop_pending = false;
++    this->started_ms = millis();
++    this->last_toggle_ms = this->started_ms;
++    this->needs_draw = true;
++    this->setLight(true);
++    return true;
++  #else
++    (void)hz;
++    (void)white;
++    return false;
++  #endif
++}
++
++void LensFinder::setLight(bool on) {
++  #ifdef HAS_FLIPPER_LED
++    // The CYD's RGB LED is active-low. Driven directly (not through flipperLED) so it works even with
++    // the EnableLED setting off — the operator asked for the light explicitly.
++    digitalWrite(R_PIN, on ? LOW : HIGH);
++    digitalWrite(G_PIN, (on && this->white) ? LOW : HIGH);
++    digitalWrite(B_PIN, (on && this->white) ? LOW : HIGH);
++    this->lit = on;
++  #else
++    (void)on;
++  #endif
++}
++
++void LensFinder::drawInstructions() {
++  #ifdef HAS_SCREEN
++    TFT_eSPI& tft = display_obj.tft;
++    tft.fillScreen(TFT_BLACK);
++    tft.setTextWrap(true);
++    tft.setTextSize(2);
++    tft.setTextColor(TFT_RED, TFT_BLACK);
++    tft.setCursor(0, 8);
++    tft.println("LENS FINDER");
++    tft.setTextSize(1);
++    tft.println();
++    tft.println("Turn the room lights off.");
++    tft.println("Hold the board screen-up, the LED");
++    tft.println("on the back facing the room, just");
++    tft.println("below your eye. Look over the top");
++    tft.println("edge and sweep slowly.");
++    tft.println();
++    tft.println("A camera lens shows as a tiny,");
++    tft.println("sharp glint that blinks with the");
++    tft.println("LED and stays put as you move.");
++    tft.println();
++    tft.print(this->white ? "White" : "Red");
++    if (this->hz == 0) tft.println(", steady.");
++    else {
++      tft.print(", strobing at ");
++      tft.print(this->hz);
++      tft.println(" Hz.");
++    }
++    tft.println();
++    tft.println("Screen goes dark in 5 s.");
++    tft.println("Tap anywhere to stop.");
++  #endif
++}
++
++bool LensFinder::main(uint32_t now) {
++  if (!this->running) return false;
++
++  if (this->hz > 0) {
++    const uint32_t half_period = 500 / this->hz;
++    if (now - this->last_toggle_ms >= half_period) {
++      this->last_toggle_ms = now;
++      this->setLight(!this->lit);
++    }
++  }
++
++  #ifdef HAS_SCREEN
++    if (this->needs_draw) {
++      this->needs_draw = false;
++      this->drawInstructions();
++    }
++    if (!this->screen_dark && now - this->started_ms >= LENS_FINDER_SCREEN_MS) {
++      backlightOff();
++      this->screen_dark = true;
++    }
++
++    #ifdef HAS_TOUCH
++      uint16_t tx = 0, ty = 0;
++      const bool touched = display_obj.updateTouch(&tx, &ty);
++      if (!touched) {
++        if (this->stop_pending) {
++          this->finish();
++          return false;
++        }
++        this->touch_armed = true;
++      }
++      else if (this->touch_armed) {
++        this->stop_pending = true;
++      }
++    #endif
++  #endif
++
++  return true;
++}
++
++void LensFinder::stop() {
++  if (!this->running) return;
++  this->finish();
++}
++
++void LensFinder::finish() {
++  this->setLight(false);
++  this->running = false;
++  this->stop_pending = false;
++  Serial.println(F("Lens finder stopped"));
++  #ifdef HAS_SCREEN
++    backlightOn();
++    // Count the stop as activity so an idle screensaver doesn't kick in straight away.
++    display_obj.last_touch_ms = millis();
++    menu_function_obj.changeMenu(menu_function_obj.current_menu);
++  #endif
++}
+diff --git a/esp32_marauder/LensFinder.h b/esp32_marauder/LensFinder.h
+new file mode 100644
+index 0000000..6214b37
+--- /dev/null
++++ b/esp32_marauder/LensFinder.h
+@@ -0,0 +1,46 @@
++#pragma once
++
++#ifndef LensFinder_h
++#define LensFinder_h
++
++// Marauder Console patch: optical lens finder. Strobes the board's RGB status LED so the operator can
++// sweep a room looking for the bright retro-reflection ("cat's-eye" glint) that a camera lens throws
++// straight back at a light source near the viewer's eye. The ESP32 drives the light; the operator's eye
++// is the detector — the CYD has no rear-facing light sensor to do it automatically.
++
++#include "configs.h"
++
++#include <Arduino.h>
++
++class LensFinder {
++  public:
++    static const uint8_t MIN_HZ = 1;
++    static const uint8_t MAX_HZ = 20;
++    static const uint8_t DEFAULT_HZ = 4;
++
++    // hz == 0 means a steady light; white lights all three channels instead of just red.
++    bool start(uint8_t hz, bool white);
++    void stop();
++    bool active() const { return this->running; }
++    // Call every loop(). Returns true while the lens finder owns the screen and touch, so the caller
++    // skips normal menu drawing/input.
++    bool main(uint32_t now);
++
++  private:
++    void setLight(bool on);
++    void drawInstructions();
++    void finish();
++
++    bool running = false;
++    bool white = false;
++    bool lit = false;
++    bool needs_draw = false;     // draw on the first main() pass, after any menu redraw has finished
++    bool screen_dark = false;
++    bool touch_armed = false;    // a tap only counts once the finger that started us has lifted
++    bool stop_pending = false;   // tapped: wait for release so the tap doesn't hit a menu button
++    uint8_t hz = DEFAULT_HZ;
++    uint32_t started_ms = 0;
++    uint32_t last_toggle_ms = 0;
++};
++
++#endif
+diff --git a/esp32_marauder/MenuFunctions.cpp b/esp32_marauder/MenuFunctions.cpp
+index 8b9bfe8..ec85bd9 100644
+--- a/esp32_marauder/MenuFunctions.cpp
++++ b/esp32_marauder/MenuFunctions.cpp
+@@ -5572,6 +5572,12 @@ void MenuFunctions::buildLazyMenu(Menu* menu)
+           this->brightnessMode();
+         });
+       #endif
++      #ifdef HAS_FLIPPER_LED
++        // Marauder Console patch: optical lens finder (same as the `lensfind` serial command).
++        this->addNodes(menu, "Lens Finder", TFTRED, BRIGHTNESS, [this]() {
++          cli_obj.runCommand(LENSFIND_CMD);
++        });
++      #endif
+       this->addNodes(menu, text_table1[17], TFTWHITE, DEVICE_INFO, [this]() {
+         wifi_scan_obj.currentScanMode = SHOW_INFO;
+         this->changeMenu(&infoMenu, true);
+diff --git a/esp32_marauder/esp32_marauder.ino b/esp32_marauder/esp32_marauder.ino
+index 0fa84bf..c7bce26 100644
+--- a/esp32_marauder/esp32_marauder.ino
++++ b/esp32_marauder/esp32_marauder.ino
+@@ -41,6 +41,7 @@ https://www.online-utility.org/image/convert/to/XBM
+ #include "settings.h"
+ #include "CommandLine.h"
+ #include "ReconMission.h"
++#include "LensFinder.h"  // Marauder Console patch: optical lens finder
+ #if defined(HAS_CSI_MOTION)
+   #include "CsiMotionMonitor.h"
+ #endif
+@@ -139,6 +140,7 @@ EvilPortal evil_portal_obj;
+ Buffer buffer_obj;
+ Settings settings_obj;
+ CommandLine cli_obj;
++LensFinder lens_finder;  // Marauder Console patch
+ ReconMission recon_obj;
+ #if defined(HAS_CSI_MOTION)
+   CsiMotionMonitor csi_motion_obj;
+@@ -554,6 +556,14 @@ void loop()
+   #ifdef HAS_BATTERY
+     battery_obj.main(currentTime);
+   #endif
++
++  // Marauder Console patch: while the lens finder runs it owns the LED, screen and touch — skip the
++  // menu (and any idle screensaver) until it's stopped.
++  if (lens_finder.main(currentTime)) {
++    delay(1);
++    return;
++  }
++
+   if ((wifi_scan_obj.currentScanMode != WIFI_PACKET_MONITOR) ||
+       (mini)) {
+     #ifdef HAS_SCREEN

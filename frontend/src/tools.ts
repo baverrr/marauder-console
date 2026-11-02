@@ -679,6 +679,30 @@ export const TOOLS: Tool[] = [
     class: "passive",
   },
   {
+    id: "lensfind",
+    category: "device",
+    name: "Lens Finder",
+    syntax: "lensfind -r 4",
+    base: "lensfind",
+    summary:
+      "Strobes the board's rear RGB LED so you can spot hidden camera lenses by the bright glint they reflect straight back. Needs the custom lens-finder firmware (firmware/custom-lensfinder); also on the touchscreen under Device.",
+    howToUse:
+      "In a dark room, hold the board screen-up just below your eye with the rear LED facing the room, look over its top edge and sweep slowly. A lens shows as a tiny, sharp glint that blinks with the LED and stays put as you move. Add -s for a steady light or -w for white. The screen goes dark after 5 s; stop with Stop, 'lensfind stop' or a tap on the screen.",
+    args: [
+      {
+        name: "rate",
+        flag: "-r",
+        placeholder: "4",
+        description: "Strobe rate, 1–20 Hz (default 4). Use -s instead for a steady light, -w for white.",
+        optional: true,
+        default: "4",
+      },
+    ],
+    streaming: true,
+    stopWith: STOP,
+    class: "passive",
+  },
+  {
     id: "csimotion",
     category: "device",
     name: "CSI Motion",

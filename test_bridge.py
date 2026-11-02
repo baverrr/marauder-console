@@ -124,6 +124,17 @@ def test_recon_status_is_not_streaming(client: TestClient) -> None:
     assert client.get("/api/status").json()["running"] is False
 
 
+@pytest.mark.parametrize("stop", ["stopscan", "lensfind stop"])
+def test_lensfind_runs_until_stopped(client: TestClient, stop: str) -> None:
+    # The custom lens-finder firmware's `lensfind` keeps the LED strobing until stopped, so the UI should
+    # show Stop; either "stopscan" or "lensfind stop" ends it.
+    client.post("/api/connect")
+    client.post("/api/command", json={"command": "lensfind -r 4"})
+    assert client.get("/api/status").json()["running"] is True
+    client.post("/api/command", json={"command": stop})
+    assert client.get("/api/status").json()["running"] is False
+
+
 @pytest.mark.parametrize("command", ["channel", "settings", "ls /", "recon status"])
 def test_new_static_commands_respond(client: TestClient, command: str) -> None:
     # New non-streaming commands get canned mock replies rather than "Unknown command", so offline dev and

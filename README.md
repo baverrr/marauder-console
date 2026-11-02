@@ -82,6 +82,12 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   mode — including All BLE (`recon ble -raw`) — supports the raw decode with the custom firmware. With
   stock firmware those raw bytes aren't available (turn Raw off) and the radar works from signal strength
   alone.
+- **Lens finder (custom firmware)** — spot hidden camera lenses: `lensfind` (or Device → **Lens Finder**
+  on the touchscreen) strobes the CYD's rear RGB LED, and in a dark room any lens pointed your way throws
+  a sharp glint straight back as you look over the board — the same trick commercial lens finders use.
+  Red or white, 1–20 Hz or steady; the screen goes dark so it doesn't spoil your night vision, and a tap
+  stops it. Your eye is the detector (the board has no rear light sensor), so range is a few metres. Needs
+  the opt-in patch in [`firmware/custom-lensfinder/`](firmware/custom-lensfinder).
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on
@@ -313,6 +319,10 @@ license) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 > source patch adds a `sniffbt -t airtag -raw` command — build and flash instructions are in
 > [`firmware/custom-rawadv/`](firmware/custom-rawadv). That's a firmware you build yourself; the bundled
 > binaries stay byte-for-byte upstream and are untouched.
+>
+> Two more opt-in patches build the same way and stack with it in any order: a hidden-camera **lens
+> finder** (`lensfind`, [`firmware/custom-lensfinder/`](firmware/custom-lensfinder)) and an idle logo
+> **screensaver** ([`firmware/custom-screensaver/`](firmware/custom-screensaver)).
 
 ## License & legal
 
