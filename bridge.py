@@ -41,6 +41,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from assistant import ProposalStore
 from assistant_runner import ChatContext, KeyStore, build_client, run_chat
 from capture_store import CaptureStore, resolve_captures_dir
+from lan_discovery import discover_cameras
 from serial_source import (
     DEFAULT_BAUD,
     DEFAULT_PORT,
@@ -119,6 +120,11 @@ class ChatBody(BaseModel):
 
 class KeyBody(BaseModel):
     key: str
+
+
+class CameraScanBody(BaseModel):
+    # Seconds to listen for ONVIF/mDNS responses (clamped server-side). None uses the default.
+    timeout: float | None = None
 
 
 class SerialManager:
@@ -485,6 +491,20 @@ def create_app(
             pass
         finally:
             manager.remove_client(ws)
+
+    # ---- Camera discovery (LAN) -----------------------------------------------------------------
+    # Actively probes the local network (ONVIF WS-Discovery multicast, optional mDNS, and a short connect
+    # to known camera ports) to find IP cameras. Explicit and user-triggered only — never auto-run, and
+    # not reachable by the assistant. Needs no serial port, so it works with the board unplugged.
+    @app.post("/api/cameras/scan")
+    async def scan_cameras(body: CameraScanBody | None = None) -> JSONResponse:
+        body = body or CameraScanBody()
+        try:
+            cameras = await discover_cameras(timeout=body.timeout)
+        except Exception as exc:  # noqa: BLE001 - surface a generic failure, not the raw exception
+            logging.getLogger("marauder.bridge").warning("camera scan failed: %s", exc)
+            return JSONResponse({"ok": False, "error": "camera scan failed"}, status_code=502)
+        return JSONResponse({"ok": True, "cameras": cameras})
 
     if FRONTEND_DIST.is_dir():
         app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
