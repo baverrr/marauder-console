@@ -1,0 +1,119 @@
+diff --git a/esp32_marauder/Display.cpp b/esp32_marauder/Display.cpp
+index ef4eee8..e0290bc 100644
+--- a/esp32_marauder/Display.cpp
++++ b/esp32_marauder/Display.cpp
+@@ -199,6 +199,8 @@ uint8_t Display::updateTouch(uint16_t *x, uint16_t *y, uint16_t threshold) {
+               *y = map(p.x, 200, 3700, 1, TFT_HEIGHT);
+               break;
+           }
++          // Marauder Console patch: record activity so the idle screensaver can time out.
++          this->last_touch_ms = millis();
+           return 1;
+         }
+         else
+@@ -382,6 +384,42 @@ void Display::drawBootSplash() {
+   tft.setTextSize(1);
+ }
+ 
++// Marauder Console patch: idle screensaver — just the Marauder logo, centred on a black screen. Reuses
++// the boot-splash logo sampler (cleanLogoPixel) so no new image asset is needed.
++void Display::drawScreensaver() {
++  const int16_t width = tft.width();
++  const int16_t height = tft.height();
++  #if defined(MARAUDER_CYD_3_5_INCH) || defined(MARAUDER_PANCAKE)
++    constexpr bool half_scale_logo = true;
++  #else
++    constexpr bool half_scale_logo = false;
++  #endif
++  const marauder::BootSplashLayout layout =
++      marauder::bootSplashLayout(width, height, half_scale_logo);
++  const int16_t logo_w = layout.logo_width;
++  const int16_t logo_h = layout.logo_height;
++  const int16_t logo_x = (width - logo_w) / 2;
++  const int16_t logo_y = (height - logo_h) / 2;  // centred on the full screen, no title/version
++
++  tft.fillScreen(TFT_BLACK);
++  const uint32_t source_x_step = logo_w > 1
++      ? (static_cast<uint32_t>(JCMK_LOGO_WIDTH - 1) << 8) / (logo_w - 1) : 0;
++  const uint32_t source_y_step = logo_h > 1
++      ? (static_cast<uint32_t>(JCMK_LOGO_HEIGHT - 1) << 8) / (logo_h - 1) : 0;
++  for (int16_t y = 0; y < logo_h; ++y) {
++    int16_t run_start = -1;
++    for (int16_t x = 0; x <= logo_w; ++x) {
++      const bool white = x < logo_w &&
++          cleanLogoPixel(x, y, logo_w, logo_h, source_x_step, source_y_step);
++      if (white && run_start < 0) run_start = x;
++      if (!white && run_start >= 0) {
++        tft.drawFastHLine(logo_x + run_start, logo_y + y, x - run_start, TFT_WHITE);
++        run_start = -1;
++      }
++    }
++  }
++}
++
+ void Display::tftDrawGraphObjects(byte x_scale)
+ {
+   //draw the graph objects
+diff --git a/esp32_marauder/Display.h b/esp32_marauder/Display.h
+index 5e4d853..45aaed9 100644
+--- a/esp32_marauder/Display.h
++++ b/esp32_marauder/Display.h
+@@ -176,6 +176,7 @@ class Display
+     bool queueCriticalLine(const String& line);
+     void displayBuffer(bool do_clear = false);
+     void drawBootSplash();
++    void drawScreensaver();  // Marauder Console patch: idle logo screensaver
+     void getTouchWhileFunction(bool pressed);
+     void init();
+     void RunSetup();
+diff --git a/esp32_marauder/esp32_marauder.ino b/esp32_marauder/esp32_marauder.ino
+index 0fa84bf..23ce1f3 100644
+--- a/esp32_marauder/esp32_marauder.ino
++++ b/esp32_marauder/esp32_marauder.ino
+@@ -505,6 +505,35 @@ void setup()
+ }
+ 
+ 
++// Marauder Console patch: idle logo screensaver for the CYD. After 30s with no touch (and only when not
++// scanning), it shows the Marauder logo centred on black; the next tap wakes and restores the current
++// screen (and is consumed, so it doesn't also trigger a menu button). Returns true while the saver is up
++// so the loop skips normal menu drawing/input. No-op on boards without CYD touch tracking.
++static bool marauderScreensaverStep(uint32_t now) {
++  #if defined(HAS_SCREEN) && defined(HAS_CYD_TOUCH)
++    static const uint32_t SCREENSAVER_TIMEOUT_MS = 30000;
++    static bool active = false;
++    if (active) {
++      uint16_t tx = 0, ty = 0;
++      if (display_obj.updateTouch(&tx, &ty)) {
++        active = false;
++        menu_function_obj.changeMenu(menu_function_obj.current_menu);  // restore the screen
++      }
++      return active;
++    }
++    if (!wifi_scan_obj.scanning() &&
++        (now - display_obj.last_touch_ms >= SCREENSAVER_TIMEOUT_MS)) {
++      display_obj.drawScreensaver();
++      active = true;
++    }
++    return active;
++  #else
++    (void)now;
++    return false;
++  #endif
++}
++
++
+ void loop()
+ {
+   currentTime = millis();
+@@ -557,7 +586,9 @@ void loop()
+   if ((wifi_scan_obj.currentScanMode != WIFI_PACKET_MONITOR) ||
+       (mini)) {
+     #ifdef HAS_SCREEN
+-      menu_function_obj.main(currentTime);
++      // Marauder Console patch: when the idle screensaver is showing, skip menu drawing/input until a tap.
++      if (!marauderScreensaverStep(currentTime))
++        menu_function_obj.main(currentTime);
+     #endif
+   }
+   #ifdef HAS_FLIPPER_LED
