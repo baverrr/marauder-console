@@ -28,8 +28,18 @@ interface Props {
   lines: ConsoleLine[];
   connected: boolean;
   running: boolean;
-  onStart: () => void;
+  /** Start a scan. `rawCapture` requests the custom firmware's raw-advert dump (`sniffbt … -raw`). */
+  onStart: (rawCapture: boolean) => void;
   onStop: () => void;
+}
+
+/** Remember the raw-capture preference across reloads; defaults on. Storage may be unavailable. */
+function loadRawPref(): boolean {
+  try {
+    return localStorage.getItem("findmy.rawCapture") !== "0";
+  } catch {
+    return true;
+  }
 }
 
 const BAND_LABEL: Record<ProximityBand, string> = { immediate: "Immediate", near: "Near", far: "Far" };
@@ -43,6 +53,18 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
   const [calib, setCalib] = useState<Calibration>(DEFAULT_CALIBRATION);
   const [sinceId, setSinceId] = useState(-1);
   const [selectedMac, setSelectedMac] = useState<string | null>(null);
+  const [rawCapture, setRawCapture] = useState<boolean>(loadRawPref);
+
+  const toggleRaw = () =>
+    setRawCapture((on) => {
+      const next = !on;
+      try {
+        localStorage.setItem("findmy.rawCapture", next ? "1" : "0");
+      } catch {
+        /* storage unavailable — keep the in-memory preference */
+      }
+      return next;
+    });
 
   const lastId = lines.length ? lines[lines.length - 1].id : -1;
   const devices = useMemo(() => buildDevices(lines, calib, sinceId), [lines, calib, sinceId]);
@@ -50,7 +72,7 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
 
   const start = () => {
     setSinceId(lastId);
-    onStart();
+    onStart(rawCapture);
   };
 
   return (
@@ -66,6 +88,20 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={rawCapture}
+            onClick={toggleRaw}
+            disabled={running}
+            title="Request raw advertisement bytes (sniffbt -raw) so adverts can be decoded. Requires the custom raw-capture firmware; applies to the next scan."
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+              rawCapture ? "bg-primary/15 text-primary" : "text-foreground/80 hover:bg-secondary/60",
+            )}
+          >
+            <Tag className="size-3" /> Raw {rawCapture ? "on" : "off"}
+          </button>
           {running ? (
             <Button variant="outline" size="sm" onClick={onStop}>
               <Square className="fill-current" /> Stop
