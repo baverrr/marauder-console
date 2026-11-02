@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
-import { Radar, ArrowUp, ArrowDown, Minus, Crosshair, Play, Square, Eraser, X, Tag } from "lucide-react";
+import {
+  Radar, ArrowUp, ArrowDown, Minus, Crosshair, Play, Square, Eraser, X, Tag,
+  Headphones, Smartphone, RadioTower, MapPin, HelpCircle, type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -15,13 +18,51 @@ import {
   type Trend,
 } from "@/lib/findmy";
 import { bytesToHex, type DecodedAdv } from "@/lib/rawadv";
+import {
+  identifyDevice,
+  batteryLabel,
+  type DeviceIdentity,
+  type DeviceCategory,
+  type BatteryLevel,
+} from "@/lib/deviceid";
 
-/** Short label for the Apple/Find My flavour of a decoded advert, or null if it isn't one. */
-function appleLabel(adv: DecodedAdv | null): string | null {
-  if (!adv?.isApple) return null;
-  if (adv.appleKind === "offline-finding") return "Find My";
-  if (adv.appleKind === "nearby") return "Find My (nearby)";
-  return "Apple";
+const CATEGORY_ICON: Record<DeviceCategory, LucideIcon> = {
+  tracker: MapPin,
+  audio: Headphones,
+  device: Smartphone,
+  beacon: RadioTower,
+  unknown: HelpCircle,
+};
+
+/** Tailwind text colour per battery level, worst → most attention. */
+const BATTERY_CLASS: Record<BatteryLevel, string> = {
+  full: "text-emerald-400",
+  medium: "text-sky-400",
+  low: "text-amber-400",
+  critical: "text-rose-400",
+};
+
+/** Compact "what is it" chip: category icon, label, battery (Find My), and a short qualifier. */
+function IdentityChip({ id }: { id: DeviceIdentity }) {
+  const Icon = CATEGORY_ICON[id.category];
+  // A separated Find My tracker is the one worth flagging (it may be travelling with you), so tint it amber.
+  const separated = id.findMy?.separated ?? false;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+        separated ? "bg-amber-500/15 text-amber-300" : "bg-primary/15 text-primary",
+      )}
+    >
+      <Icon className="size-2.5" /> {id.label}
+      {id.note && <span className="opacity-70">· {id.note}</span>}
+      {id.findMy && (
+        <span className={cn("opacity-90", BATTERY_CLASS[id.findMy.battery])}>
+          · {batteryLabel(id.findMy.battery).toLowerCase()} batt
+        </span>
+      )}
+    </span>
+  );
 }
 
 interface Props {
@@ -189,11 +230,7 @@ export function FindMyView({ lines, connected, running, onStart, onStop }: Props
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">{d.name ?? "Unknown device"}</span>
-                    {appleLabel(d.adv) && (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        <Tag className="size-2.5" /> {appleLabel(d.adv)}
-                      </span>
-                    )}
+                    {identifyDevice(d.adv) && <IdentityChip id={identifyDevice(d.adv)!} />}
                   </div>
                   <div className="truncate font-mono text-xs text-muted-foreground">{d.mac}</div>
                 </div>
@@ -258,7 +295,16 @@ function HomingPanel({ device, onClose, onCalibrate }: { device: FindMyDevice; o
  * running (`sniffbt -t airtag -raw`); with stock firmware there are no raw bytes and this is absent.
  */
 function AdvDetails({ adv }: { adv: DecodedAdv }) {
+  const id = identifyDevice(adv);
   const rows: { label: string; value: string }[] = [];
+  if (id) rows.push({ label: "Device", value: id.note ? `${id.label} · ${id.note}` : id.label });
+  if (id?.findMy) {
+    const fm = id.findMy;
+    rows.push({ label: "Owner state", value: fm.separated ? "Separated (findable, away from owner)" : "Owner nearby" });
+    rows.push({ label: "Battery", value: batteryLabel(fm.battery) });
+    rows.push({ label: "Maintained", value: fm.maintained ? "Yes (owner connected recently)" : "No" });
+    rows.push({ label: "Status byte", value: `0x${fm.statusByte.toString(16).padStart(2, "0")} (best-effort read)` });
+  }
   if (adv.flags !== null) rows.push({ label: "Flags", value: `0x${adv.flags.toString(16).padStart(2, "0")}` });
   if (adv.companyId !== null) {
     const co = `0x${adv.companyId.toString(16).padStart(4, "0")}`;

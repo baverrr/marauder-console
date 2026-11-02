@@ -72,9 +72,12 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   environment are adjustable. Parsing only — the ESP32 does the sensing. A **Raw** toggle (on by default)
   makes Start request the custom raw-capture firmware's advert dump (`sniffbt -t airtag -raw`, see
   [`firmware/custom-rawadv/`](firmware/custom-rawadv)); the radar then also decodes each device's raw BLE
-  advertisement — real local name, Apple (`0x004C`) Find My status, service UUIDs and flags — shown in the
-  homing panel. With stock firmware those raw bytes aren't available (turn Raw off) and the radar works
-  from signal strength alone.
+  advertisement and **says what it is** — a Find My tracker (with battery level and whether it's
+  *separated* from its owner or the owner's nearby), AirPods / Beats, a Tile, or a named vendor device —
+  from the Apple (`0x004C`) continuity messages, company id and service UUIDs. Each device shows an
+  identity chip in the list (separated trackers flagged in amber, the "is something following me" case),
+  with the decoded Find My status byte in the homing panel. With stock firmware those raw bytes aren't
+  available (turn Raw off) and the radar works from signal strength alone.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on

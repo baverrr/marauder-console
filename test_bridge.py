@@ -247,9 +247,12 @@ def test_sniffbt_raw_emits_decodable_rawadv_lines() -> None:
     assert len(hexpayload) > 0 and len(hexpayload) % 2 == 0
     bytes.fromhex(hexpayload)  # valid hex
 
-    # Deterministic and fabricated: even n is an Apple (0x004C) Find My advert, odd n a named device.
-    apple = _fake_adv_hex(2)
+    # Deterministic and fabricated: the mock cycles through representative device types (n % 5) so the
+    # decoder's classification is exercised — Find My separated/owner-nearby, proximity pairing, and
+    # named vendor devices.
+    apple = _fake_adv_hex(0)
     assert "ff4c0012" in apple  # Manufacturer Specific Data, Apple company id, Find My subtype
+    assert "ff4c0007" in _fake_adv_hex(2)  # Apple proximity pairing (AirPods / Beats)
     named = _fake_adv_hex(3)
     assert named.startswith("020106")  # Flags AD structure
     assert "09" in named  # Complete Local Name AD type
