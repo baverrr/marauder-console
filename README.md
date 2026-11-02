@@ -78,9 +78,10 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   *separated* from its owner or the owner's nearby), an iBeacon (UUID / major / minor), AirPods / Beats, a
   Tile, or a named vendor device — from the Apple (`0x004C`) continuity messages, company id and service
   UUIDs. Each device shows an identity chip in the list (separated trackers flagged in amber, the "is
-  something following me" case), with the decoded Find My status byte in the homing panel. (`recon ble`
-  doesn't take `-raw` yet, so All BLE reports signal + name without the raw decode.) With stock firmware
-  those raw bytes aren't available (turn Raw off) and the radar works from signal strength alone.
+  something following me" case), with the decoded Find My status byte in the homing panel. Every scan
+  mode — including All BLE (`recon ble -raw`) — supports the raw decode with the custom firmware. With
+  stock firmware those raw bytes aren't available (turn Raw off) and the radar works from signal strength
+  alone.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on

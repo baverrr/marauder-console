@@ -91,7 +91,7 @@ const SCAN_MODES: ScanMode[] = [
   { id: "ibeacon", label: "iBeacon", cmd: "sniffbt -t ibeacon", rawSupported: true, blurb: "iBeacon proximity beacons (UUID / major / minor)." },
   { id: "flipper", label: "Flipper", cmd: "sniffbt -t flipper", rawSupported: true, blurb: "Flipper Zero devices advertising nearby." },
   { id: "flock", label: "Flock", cmd: "sniffbt -t flock", rawSupported: true, blurb: "Flock Safety camera beacons." },
-  { id: "all", label: "All BLE", cmd: "recon ble", rawSupported: false, blurb: "Every BLE device in range (general recon)." },
+  { id: "all", label: "All BLE", cmd: "recon ble", rawSupported: true, blurb: "Every BLE device in range (general recon)." },
 ];
 
 /** Remember the raw-capture preference across reloads; defaults on. Storage may be unavailable. */
