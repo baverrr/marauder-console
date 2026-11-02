@@ -17,12 +17,13 @@ warn() { printf '\n\033[1;33m!!  %s\033[0m\n' "$*"; }
 # Make cargo available if it was installed user-local by the toolchain script.
 command -v cargo >/dev/null 2>&1 || . "$HOME/.cargo/env" 2>/dev/null || true
 
-ok "1/4  Build frontend + release binary"
-npm --prefix "$REPO/frontend" run build
-# Tauri bakes frontend/dist into the binary at compile time. cargo's own change-detection for the dist
-# dir is unreliable, so force a re-embed of the freshly built UI by refreshing the build script's input.
-touch "$REPO/src-tauri/build.rs"
-cargo build --release --manifest-path "$REPO/src-tauri/Cargo.toml"
+ok "1/4  Build the release binary (via the Tauri CLI)"
+# Build through the Tauri CLI, NOT a bare `cargo build`. The CLI builds in production mode and embeds
+# frontend/dist into the binary; a plain `cargo build` yields a *dev-mode* binary that loads the Vite
+# dev server (http://localhost:5173) instead of the bundled UI, so the installed app just shows
+# "Could not connect to localhost" unless a dev server happens to be running. The CLI also runs the
+# configured beforeBuildCommand (the frontend build), so a separate `npm run build` is not needed.
+"$REPO/frontend/node_modules/.bin/tauri" build --no-bundle
 BIN="$REPO/src-tauri/target/release/marauder-console"
 [ -x "$BIN" ] || { warn "binary not found at $BIN — did the build fail?"; exit 1; }
 

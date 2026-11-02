@@ -115,6 +115,11 @@ sidecar — no `./venv` needed on the target machine):
 bash scripts/build-bundle.sh
 ```
 
+> **Building the binary by hand?** Use the Tauri CLI (`frontend/node_modules/.bin/tauri build`), **not** a
+> bare `cargo build` — the latter produces a *dev-mode* binary that loads the Vite dev server
+> (`localhost:5173`) instead of the bundled UI, so it shows "Could not connect to localhost" when no dev
+> server is running. The scripts above already build the right way.
+
 Pushing a `v*` tag runs [`release.yml`](.github/workflows/release.yml), which builds the bundle in CI and
 attaches the `.deb`, the AppImage (best-effort) and a firmware + flasher zip to the GitHub release — so the
 console and the matching ESP32 Marauder firmware ship together. The artifacts are built against
