@@ -65,7 +65,7 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
 - **Wardrive map (PC-side)** — plots the located access points from a Wigle wardrive CSV on an offline,
   self-contained point map (coloured by signal strength, with per-point details). No map tiles are
   fetched, so your route is never sent anywhere; rows without a GPS fix are skipped.
-- **Find My radar (PC-side)** — under the **Analysis** tab, turns the `findmy` BLE stream into a live,
+- **Find My radar (PC-side)** — under the **Analysis** tab, turns the `sniffbt -t airtag` BLE stream into a live,
   nearest-first list of detected devices with an estimated distance (from signal strength), a proximity
   band (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from
   RSSI is rough by nature, so it leans on bands and trend over false precision; the 1 m reference and

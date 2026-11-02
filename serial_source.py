@@ -297,7 +297,11 @@ def _fake_stream_line(command: str, n: int) -> str:
     mac = f"00:00:5e:00:53:{(n % 256):02x}"  # RFC 7042 documentation MAC range
     rssi = -40 - random.randint(0, 50)
     verb = command.split()[0].lower()
-    if verb.startswith("sniffbt") or verb in {"blespam", "findmy", "remoteid", "sniffskim", "spoofat"}:
+    if verb.startswith("sniffbt"):
+        # Real firmware prints a bare "<rssi> <mac>" for BLE sniffs like `sniffbt -t airtag` — match it
+        # so the Find My radar sees representative lines in mock mode.
+        return f"{rssi} {mac}"
+    if verb in {"blespam", "findmy", "remoteid", "sniffskim", "spoofat"}:
         return f"[{n:03d}] BLE device {mac}  RSSI {rssi}  name=Placeholder-{n}"
     if verb in {"pingscan", "arpscan"}:
         return f"[{n:03d}] host 192.0.2.{n % 254 + 1} is up (mock)"
