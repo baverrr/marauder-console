@@ -16,7 +16,14 @@
 import type { DecodedAdv } from "@/lib/rawadv";
 
 /** Rough class of device, for grouping and iconography. */
-export type DeviceCategory = "tracker" | "audio" | "device" | "beacon" | "unknown";
+export type DeviceCategory = "tracker" | "audio" | "device" | "beacon" | "camera" | "unknown";
+
+/**
+ * How sure a heuristic classification is. Cameras are matched by their advertised name (most only
+ * advertise over BLE while pairing, or — like Flock Safety's ALPR cameras — as a beacon), so the match is
+ * a likelihood, not a certainty; this says how camera-specific the matched name was.
+ */
+export type Confidence = "low" | "medium" | "high";
 
 /** Battery level as read from a Find My status byte's top two bits. */
 export type BatteryLevel = "full" | "medium" | "low" | "critical";
@@ -57,6 +64,8 @@ export interface DeviceIdentity {
   ibeacon: IBeacon | null;
   /** Short qualifier shown next to the label, e.g. "separated", "owner nearby", "pairing"; else null. */
   note: string | null;
+  /** For heuristic classifications (cameras matched by advertised name), how sure the match is; else absent. */
+  confidence?: Confidence;
 }
 
 /** Bluetooth SIG company identifiers — the common subset worth naming; anything else stays a hex id. */
@@ -132,6 +141,65 @@ function iBeaconFrom(value: Uint8Array): IBeacon | null {
 }
 
 /**
+ * Camera name fingerprints, tried in order (first match wins), most camera-specific first. A hit on a
+ * generic camera word ("camera", "cctv", "doorbell") or a camera-only brand (Reolink, Hikvision, Flock…)
+ * is high confidence; a hit on a brand that also makes non-camera smart-home gear (Ring, Nest, Wyze…) is
+ * only "likely". Matched case-insensitively against the advertised local name. This is a deliberately
+ * conservative, extensible seed — the shared fingerprint data planned for the network scanner will grow it.
+ */
+const CAMERA_NAME_HINTS: { re: RegExp; vendor: string | null; confidence: Confidence }[] = [
+  // Generic — the name itself says "camera".
+  { re: /ip[-_ ]?cam(era)?\b/, vendor: null, confidence: "high" },
+  { re: /\bcctv\b/, vendor: null, confidence: "high" },
+  { re: /doorbell/, vendor: null, confidence: "high" },
+  { re: /\bcamera\b/, vendor: null, confidence: "high" },
+  // Camera-first vendors / product lines.
+  { re: /flock/, vendor: "Flock Safety", confidence: "high" },
+  { re: /reolink/, vendor: "Reolink", confidence: "high" },
+  { re: /amcrest/, vendor: "Amcrest", confidence: "high" },
+  { re: /hikvision/, vendor: "Hikvision", confidence: "high" },
+  { re: /\bdahua\b/, vendor: "Dahua", confidence: "high" },
+  { re: /lorex/, vendor: "Lorex", confidence: "high" },
+  { re: /foscam/, vendor: "Foscam", confidence: "high" },
+  { re: /annke/, vendor: "Annke", confidence: "high" },
+  { re: /wyze[-_ ]?cam/, vendor: "Wyze", confidence: "high" },
+  // Brands that also make non-camera gear — a name hit is "likely", not certain.
+  { re: /\bwyze\b/, vendor: "Wyze", confidence: "medium" },
+  { re: /\bring\b/, vendor: "Ring", confidence: "medium" },
+  { re: /\bnest\b/, vendor: "Google Nest", confidence: "medium" },
+  { re: /\barlo\b/, vendor: "Arlo", confidence: "medium" },
+  { re: /\beufy\b/, vendor: "Eufy", confidence: "medium" },
+  { re: /\bblink\b/, vendor: "Blink", confidence: "medium" },
+  { re: /\btapo\b/, vendor: "TP-Link Tapo", confidence: "medium" },
+  // A bare "cam" token — could be a camera; lowest confidence.
+  { re: /\bcam\b/, vendor: null, confidence: "low" },
+];
+
+/**
+ * Identify a camera from an advertised BLE name. Pure and null when nothing matches. Exposed separately so
+ * the radar can also check plain sightings (which carry a name but no decoded advert, e.g. from `recon ble`
+ * without raw capture) — not just fully decoded adverts.
+ */
+export function identifyCameraByName(name: string | null): DeviceIdentity | null {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  for (const hint of CAMERA_NAME_HINTS) {
+    if (hint.re.test(n)) {
+      return {
+        label: hint.vendor ? `${hint.vendor} camera` : "Camera",
+        vendor: hint.vendor,
+        category: "camera",
+        findMy: null,
+        ibeacon: null,
+        note: null,
+        confidence: hint.confidence,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Classify a decoded advertisement. Returns null when nothing identifying is present (no vendor, no known
  * service, no Apple message) so the caller can fall back to the device name.
  */
@@ -180,6 +248,10 @@ export function identifyDevice(adv: DecodedAdv | null): DeviceIdentity | null {
     const hit = SERVICE_NAMES[svc.toLowerCase()];
     if (hit) return { label: hit.label, vendor: hit.vendor, category: hit.category, findMy: null, ibeacon: null, note: null };
   }
+
+  // A camera named in the advertisement beats the generic vendor fallback below.
+  const camera = identifyCameraByName(adv.name);
+  if (camera) return camera;
 
   // Otherwise fall back to a named manufacturer, if any.
   if (vendor) return { label: vendor, vendor, category: "device", findMy: null, ibeacon: null, note: null };
