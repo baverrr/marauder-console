@@ -69,11 +69,12 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   nearest-first list of detected devices with an estimated distance (from signal strength), a proximity
   band (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from
   RSSI is rough by nature, so it leans on bands and trend over false precision; the 1 m reference and
-  environment are adjustable. Parsing only — the ESP32 does the sensing. With the optional raw-capture
-  firmware (`sniffbt -t airtag -raw`, see [`firmware/custom-rawadv/`](firmware/custom-rawadv)) the radar
-  also decodes each device's raw BLE advertisement — real local name, Apple (`0x004C`) Find My status,
-  service UUIDs and flags — shown in the homing panel; with stock firmware those raw bytes aren't
-  available and the radar works from signal strength alone.
+  environment are adjustable. Parsing only — the ESP32 does the sensing. A **Raw** toggle (on by default)
+  makes Start request the custom raw-capture firmware's advert dump (`sniffbt -t airtag -raw`, see
+  [`firmware/custom-rawadv/`](firmware/custom-rawadv)); the radar then also decodes each device's raw BLE
+  advertisement — real local name, Apple (`0x004C`) Find My status, service UUIDs and flags — shown in the
+  homing panel. With stock firmware those raw bytes aren't available (turn Raw off) and the radar works
+  from signal strength alone.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on
