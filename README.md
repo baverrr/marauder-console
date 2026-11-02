@@ -237,6 +237,17 @@ The bridge takes flags (see `bridge.py serve --help`):
 
 The serial port can also be changed per-session in the top bar before connecting.
 
+### Behind a reverse proxy
+
+The bridge binds to loopback and, as a DNS-rebinding defence, only accepts requests whose `Host` is a
+loopback name (`localhost` / `127.0.0.1`) — so reaching it through a proxy under another name (e.g.
+`https://marauder.home.arpa`) otherwise fails with **"Invalid host header"**. To serve it under such a
+name, set the `MARAUDER_PUBLIC_HOST` environment variable to that hostname (comma-separated for several);
+it's then accepted as a `Host` header and as a browser origin (HTTP, CORS and the WebSocket upgrade). It's
+opt-in and empty by default, so the bridge stays loopback-only unless you set it. Point the proxy at
+`127.0.0.1:8200` and forward WebSocket upgrades; no `Host`/`Origin` rewriting is needed. For the systemd
+user service, add it as `Environment=MARAUDER_PUBLIC_HOST=marauder.home.arpa`.
+
 ## Project layout
 
 ```

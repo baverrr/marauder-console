@@ -60,13 +60,32 @@ STREAMING_PREFIXES = ("scan", "sniff", "wardrive", "blespam", "findmy", "remotei
                       "packetcount", "mactrack", "evilportal", "karma", "gpsdata", "nmea")
 
 
+def _parse_public_hosts(raw: str) -> list[str]:
+    """Hostnames from MARAUDER_PUBLIC_HOST (comma-separated, whitespace-tolerant); empty when unset."""
+    return [host.strip() for host in raw.split(",") if host.strip()]
+
+
+# Optional extra hostname(s) this bridge is served under — e.g. behind a reverse proxy at
+# https://marauder.home.arpa. Opt-in via MARAUDER_PUBLIC_HOST (comma-separated for several); the default
+# is empty, so the bridge stays loopback-only. Set it only for a host you control: each is added to both
+# the accepted Host headers and the allowed browser origins below.
+_PUBLIC_HOSTS = _parse_public_hosts(os.environ.get("MARAUDER_PUBLIC_HOST", ""))
+
 # Origins the webview/dev server legitimately call from. Shared by the HTTP CORS policy and the WebSocket
-# origin check (CORS does not apply to WebSocket upgrades, so /ws has to check Origin itself).
-_ALLOWED_ORIGINS = ("tauri://localhost", "http://tauri.localhost", "https://tauri.localhost")
+# origin check (CORS does not apply to WebSocket upgrades, so /ws has to check Origin itself). A configured
+# public host is allowed over both https and http (a reverse proxy usually terminates TLS in front).
+_ALLOWED_ORIGINS = (
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    *(f"https://{host}" for host in _PUBLIC_HOSTS),
+    *(f"http://{host}" for host in _PUBLIC_HOSTS),
+)
 _ALLOWED_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
 # Host header values accepted (defends against DNS-rebinding, where a browser reaches the loopback port
-# via an attacker domain that resolves to 127.0.0.1). Port is stripped before matching by Starlette.
-_ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
+# via an attacker domain that resolves to 127.0.0.1). Port is stripped before matching by Starlette. Any
+# MARAUDER_PUBLIC_HOST entries are appended so the bridge can be reached under its proxied name too.
+_ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver", *_PUBLIC_HOSTS]
 
 
 def _origin_allowed(origin: str | None) -> bool:

@@ -275,6 +275,40 @@ def test_ws_allows_an_allowed_origin(client: TestClient) -> None:
         assert ws.receive_json()["type"] == "status"
 
 
+def test_parse_public_hosts() -> None:
+    from bridge import _parse_public_hosts
+
+    assert _parse_public_hosts("") == []
+    assert _parse_public_hosts("   ") == []
+    assert _parse_public_hosts("solo.example") == ["solo.example"]
+    # comma-separated, whitespace-tolerant, empties dropped
+    assert _parse_public_hosts(" a.example , b.example ,") == ["a.example", "b.example"]
+
+
+def test_public_host_allows_proxied_host_and_origin(tmp_path, monkeypatch) -> None:
+    # MARAUDER_PUBLIC_HOST (e.g. a reverse-proxy name like marauder.home.arpa) must be accepted as both a
+    # Host header and a browser Origin — for plain requests, CORS, and the WS upgrade — while other hosts
+    # and origins stay blocked. We patch the resolved allow-lists (what the env var feeds) directly.
+    monkeypatch.setattr("bridge._ALLOWED_HOSTS", ["127.0.0.1", "localhost", "testserver", "console.example"])
+    monkeypatch.setattr(
+        "bridge._ALLOWED_ORIGINS",
+        ("tauri://localhost", "https://console.example", "http://console.example"),
+    )
+    app = create_app(mock=True, data_dir=tmp_path)
+    with TestClient(app) as c:
+        # Host header accepted (TrustedHostMiddleware would 400 an unlisted host)
+        assert c.get("/api/status", headers={"Host": "console.example"}).status_code == 200
+        assert c.get("/api/status", headers={"Host": "evil.example"}).status_code == 400
+        # CORS echoes the proxied origin, and only that one
+        ok = c.get("/api/status", headers={"Origin": "https://console.example"})
+        assert ok.headers.get("access-control-allow-origin") == "https://console.example"
+        bad = c.get("/api/status", headers={"Origin": "https://evil.example"})
+        assert "access-control-allow-origin" not in bad.headers
+        # WS upgrade accepts the proxied origin
+        with c.websocket_connect("/ws", headers={"Origin": "https://console.example"}) as ws:
+            assert ws.receive_json()["type"] == "status"
+
+
 def test_trustedhost_rejects_a_foreign_host(client: TestClient) -> None:
     # DNS-rebinding defense: a request whose Host isn't a loopback name is rejected.
     assert client.get("/api/status", headers={"Host": "evil.example"}).status_code == 400
