@@ -8,6 +8,7 @@ import { HardwarePanel } from "@/components/HardwarePanel";
 import { HistoryView } from "@/components/HistoryView";
 import { CapturesView } from "@/components/CapturesView";
 import { WardriveMapView } from "@/components/WardriveMapView";
+import { FindMyView } from "@/components/FindMyView";
 import { AssistantView } from "@/components/AssistantView";
 import { useBridge } from "@/lib/bridge";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
@@ -82,7 +83,15 @@ export default function App() {
                 onSend={(command) => void bridge.send(command)}
               />
             ) : view === "analysis" ? (
-              analysisSel === "captures" ? (
+              analysisSel === "findmy" ? (
+                <FindMyView
+                  lines={bridge.lines}
+                  connected={status.connected}
+                  running={status.running}
+                  onStart={() => void bridge.send("findmy")}
+                  onStop={stopAll}
+                />
+              ) : analysisSel === "captures" ? (
                 <CapturesView />
               ) : analysisSel === "map" ? (
                 <WardriveMapView />

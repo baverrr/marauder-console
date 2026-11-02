@@ -7,6 +7,7 @@ import {
   History,
   FolderOpen,
   MapPin,
+  Radar,
   Bot,
 } from "lucide-react";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
@@ -16,9 +17,10 @@ import { cn } from "@/lib/utils";
 export type View = "reference" | "control" | "analysis" | "assistant";
 
 /** PC-side analysis views (Phase 3). */
-export type AnalysisId = "history" | "captures" | "map";
+export type AnalysisId = "history" | "captures" | "map" | "findmy";
 
 export const ANALYSIS_VIEWS: { id: AnalysisId; name: string; icon: ComponentType<{ className?: string }> }[] = [
+  { id: "findmy", name: "Find My radar", icon: Radar },
   { id: "captures", name: "Capture library", icon: FolderOpen },
   { id: "map", name: "Wardrive map", icon: MapPin },
   { id: "history", name: "Session history", icon: History },
