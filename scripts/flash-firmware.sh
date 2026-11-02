@@ -74,10 +74,19 @@ PY
 CHIP="$(printf '%s\n' "$PLAN" | head -1 | cut -f1)"
 ok "Firmware verified (sha256 OK) — board '$BOARD', chip $CHIP"
 
-# Refuse to flash while something holds the serial port.
+# Refuse to flash while something holds the serial port. Prefer fuser; fall back to lsof (not every
+# distro ships fuser); if neither is installed, say so rather than silently assuming the port is free.
 if [ -e "$PORT" ]; then
   holder=""
-  command -v fuser >/dev/null 2>&1 && holder="$(fuser "$PORT" 2>/dev/null || true)"
+  if command -v fuser >/dev/null 2>&1; then
+    holder="$(fuser "$PORT" 2>/dev/null || true)"
+  elif command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -t "$PORT" 2>/dev/null | tr '\n' ' ' || true)"
+    [ -n "${pids// /}" ] && holder=" ${pids% }"  # lead with a space to match fuser's " <pid>" format
+  else
+    err "Note: neither 'fuser' nor 'lsof' is installed — cannot check whether $PORT is in use."
+    err "Make sure Marauder Console is disconnected (or the service stopped) before you continue."
+  fi
   if [ -n "$holder" ]; then
     err "Serial port $PORT is in use (pid$holder). Disconnect in Marauder Console (or stop the"
     err "marauder-console service), then re-run. Nothing was flashed."
