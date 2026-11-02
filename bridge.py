@@ -212,10 +212,11 @@ class SerialManager:
         verb = cmd.split()[0] if cmd else ""
         # `recon` needs its subcommand: "recon ble"/"recon wifi" stream, "recon stop" ends them, and
         # "recon status" is a one-shot query that leaves the running state untouched — so it can't go in
-        # the first-word STREAMING_PREFIXES tuple.
-        if verb == "stopscan" or cmd.startswith("recon stop"):
+        # the first-word STREAMING_PREFIXES tuple. `lensfind` (custom lens-finder firmware) is the same
+        # shape: it runs until "stopscan" or "lensfind stop".
+        if verb == "stopscan" or cmd.startswith(("recon stop", "lensfind stop")):
             self.running = False
-        elif verb.startswith(STREAMING_PREFIXES) or cmd.startswith(("recon ble", "recon wifi")):
+        elif verb.startswith(STREAMING_PREFIXES) or cmd.startswith(("recon ble", "recon wifi", "lensfind")):
             self.running = True
         await self.broadcast_status()
 
