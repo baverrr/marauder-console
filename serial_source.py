@@ -295,17 +295,22 @@ _STREAMING_VERBS = {
 def _fake_stream_lines(command: str, n: int) -> list[str]:
     """Lines emitted for one stream tick — usually one.
 
-    When the command is a Bluetooth sniff with the custom firmware's ``-raw`` switch
-    (``sniffbt -t airtag -raw``), the plain ``<rssi> <mac>`` line is paired with a synthetic ``RAWADV``
-    line carrying a full (fake) advertisement payload, so the Find My radar's raw-advert decoding can be
-    exercised offline. Stock firmware never emits ``RAWADV``.
+    When the command is a BLE scan with the custom firmware's ``-raw`` switch (``sniffbt … -raw`` or
+    ``recon ble -raw``), the plain sighting line is paired with a synthetic ``RAWADV`` line carrying a
+    full (fake) advertisement payload, so the Find My radar's raw-advert decoding can be exercised
+    offline. Stock firmware never emits ``RAWADV``.
     """
     primary = _fake_stream_line(command, n)
     args = command.split()
     verb = args[0].lower() if args else ""
-    if verb == "sniffbt" and "-raw" in args:
-        rssi, _, mac = primary.partition(" ")  # primary is "<rssi> <mac>"
-        return [primary, f"RAWADV {mac} {rssi} {_fake_adv_hex(n)}"]
+    if verb in {"sniffbt", "recon"} and "-raw" in args:
+        # The plain line's format differs by mode, so pull the MAC and RSSI out by token rather than
+        # assuming a fixed layout.
+        tokens = primary.replace(",", " ").split()
+        mac = next((t for t in tokens if t.count(":") == 5), None)
+        rssi = next((t for t in tokens if t.startswith("-") and t[1:].isdigit()), None)
+        if mac and rssi:
+            return [primary, f"RAWADV {mac} {rssi} {_fake_adv_hex(n)}"]
     return [primary]
 
 
