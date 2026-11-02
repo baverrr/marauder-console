@@ -19,8 +19,9 @@ manufacturer data, service UUIDs, flags …).
 **v1.20.0** (commit `511bb369`, the tag recorded in [`../manifest.json`](../manifest.json)):
 
 - `WiFiScan.h` — adds one opt-in flag, `bool bt_raw_dump = false;`.
-- `CommandLine.cpp` — `sniffbt` now recognises a `-raw` switch and sets that flag (off unless passed).
-- `WiFiScan.cpp` — in the AirTag/Find My scan branch, right after the normal `<rssi> <mac>` line, when
+- `CommandLine.cpp` — `sniffbt` and `recon ble` now recognise a `-raw` switch and set that flag (off
+  unless passed).
+- `WiFiScan.cpp` — in each BLE scan branch, right after the device's normal sighting line, when
   `bt_raw_dump` is set it prints one extra line:
 
   ```
@@ -28,20 +29,35 @@ manufacturer data, service UUIDs, flags …).
   ```
 
   e.g. `RAWADV 00:00:5E:00:53:17 -63 1eff4c0012...`. The `RAWADV ` prefix is deliberately distinct so it
-  never collides with the plain `<rssi> <mac>` line the console's Find My radar already parses — existing
-  behaviour is unchanged whether or not you pass `-raw`.
+  never collides with the plain sighting lines the console already parses — existing behaviour is
+  unchanged whether or not you pass `-raw`. The dump is wired into every BLE sniff branch that reports
+  devices: **AirTag/Find My** (`BT_SCAN_AIRTAG`), **iBeacon** and the catch-all **BT_SCAN_ALL**,
+  **Flipper**, **Flock**, and **Meta/Ray-Ban** (`BT_SCAN_RAYBAN`). `recon ble` runs `BT_SCAN_ALL`, so it
+  shares the same path.
+
+  These are all in the NimBLE-1 scan callback — the one the CYD (`MARAUDER_CYD_MICRO`, NimBLE 1.3.8) and
+  similar boards compile; the separate NimBLE-2 callback is left as stock, matching the rest of this patch.
 
 The console-side decoder for this line lives in
 [`frontend/src/lib/rawadv.ts`](../../frontend/src/lib/rawadv.ts).
 
-### New command form
+### New command forms
 
-```
-sniffbt -t airtag -raw
-```
+Append `-raw` to any of the BLE sniff modes (or `recon ble`) to also get the `RAWADV` lines; `stopscan`
+to stop. Without `-raw` the firmware behaves exactly as stock.
 
-Same as `sniffbt -t airtag`, plus the `RAWADV` lines. `stopscan` to stop. Without `-raw` the firmware
-behaves exactly as stock.
+| Mode | Command | Scan mode |
+|---|---|---|
+| Find My / AirTag | `sniffbt -t airtag -raw` | `BT_SCAN_AIRTAG` |
+| iBeacon | `sniffbt -t ibeacon -raw` | `BT_SCAN_IBEACON` |
+| Flipper Zero | `sniffbt -t flipper -raw` | `BT_SCAN_FLIPPER` |
+| Flock Safety | `sniffbt -t flock -raw` | `BT_SCAN_FLOCK` |
+| Meta / Ray-Ban | `sniffbt -t meta -raw` | `BT_SCAN_RAYBAN` |
+| All BLE (no filter) | `sniffbt -raw` | `BT_SCAN_ALL` |
+| BLE recon | `recon ble -raw` | `BT_SCAN_ALL` |
+
+The `RAWADV <MAC> <rssi> <hexpayload>` line format is identical across every mode, so the console's
+`rawadv.ts` parser decodes them all unchanged.
 
 ## Building it
 
