@@ -53,18 +53,24 @@ export interface FindMyDevice {
 const MAC_RE = /([0-9a-f]{2}(?::[0-9a-f]{2}){5})/i;
 const RSSI_RE = /rssi[:=\s]\s*(-?\d{1,3})/i;
 const RSSI_DBM_RE = /(-?\d{2,3})\s*dbm/i;
+// The real Marauder BLE sniff (`sniffbt -t airtag`) prints bare "<rssi> <mac>", e.g. "-91 AA:BB:CC:DD:EE:FF"
+// (sometimes with a leading "> " prompt), with no "rssi"/"dBm" label — so match a negative RSSI that sits
+// right before the MAC. Anchoring on the MAC keeps this from grabbing an unrelated number elsewhere.
+const RSSI_BARE_RE = /(-\d{2,3})\s+(?:[0-9a-f]{2}:){5}[0-9a-f]{2}/i;
 const NAME_RE = /name[:=]\s*(\S.*?)\s*$/i;
 const EWMA_ALPHA = 0.35;
 
 /**
  * Parse one serial line into a BLE sighting, or null if it isn't one. A line only counts when it has both
- * a MAC and a plausible RSSI, so ordinary status text is ignored. Tolerant of minor format differences
- * ("RSSI -63", "rssi:-63", "-63 dBm") since the exact firmware wording can vary by build.
+ * a MAC and a plausible RSSI, so ordinary status text is ignored. Tolerant of the format differences seen
+ * across firmware builds: the real `sniffbt` output "-63 AA:BB:.." as well as labelled variants
+ * ("RSSI -63", "rssi:-63", "-63 dBm").
  */
 export function parseBleLine(text: string): { mac: string; rssi: number; name: string | null } | null {
   const mac = text.match(MAC_RE)?.[1];
   if (!mac) return null;
-  const rssiStr = text.match(RSSI_RE)?.[1] ?? text.match(RSSI_DBM_RE)?.[1];
+  const rssiStr =
+    text.match(RSSI_RE)?.[1] ?? text.match(RSSI_DBM_RE)?.[1] ?? text.match(RSSI_BARE_RE)?.[1];
   if (rssiStr === undefined) return null;
   const rssi = Number(rssiStr);
   if (!Number.isFinite(rssi) || rssi > 0 || rssi < -120) return null;
