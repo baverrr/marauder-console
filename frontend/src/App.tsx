@@ -88,7 +88,7 @@ export default function App() {
                   lines={bridge.lines}
                   connected={status.connected}
                   running={status.running}
-                  onStart={(raw) => void bridge.send(raw ? "sniffbt -t airtag -raw" : "sniffbt -t airtag")}
+                  onStart={(command) => void bridge.send(command)}
                   onStop={stopAll}
                 />
               ) : analysisSel === "captures" ? (
