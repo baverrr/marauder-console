@@ -27,13 +27,18 @@ Files that the board itself writes (packet captures, wardrive logs, saved lists)
 
 ## What goes over your network, and to whom
 
-By default the bridge listens only on `127.0.0.1` (localhost), so nothing leaves your computer: the
-browser, the bridge and the board all talk on the same machine, with the board reached over USB
-serial.
+By default the bridge listens only on `127.0.0.1` (localhost): the browser, the bridge and the board all
+talk on the same machine, with the board reached over USB serial. Almost nothing leaves your computer —
+the one exception is the **Camera scan**, which reaches onto your local network only when you run it
+(see below).
 
 - **Browser to bridge:** commands over local HTTP and a local WebSocket that streams the serial
   output. On localhost this traffic never touches the network.
 - **Bridge to board:** over the USB serial cable, not the network.
+- **Camera scan (only when you run it):** the **Camera scan** under Analysis is the one feature that
+  deliberately sends traffic onto your local network — a multicast ONVIF/mDNS discovery and brief
+  connections to known camera ports — to find IP cameras. It runs only when you press **Scan my
+  network**, the probes stay on your LAN, and it sends nothing to any outside service.
 - **If you expose the bridge yourself** (for example by binding it to a LAN address or putting it
   behind a reverse proxy), then it is reachable by other devices on that network. In that case use
   your own transport security and access control; the bridge speaks plain HTTP and has no built-in
