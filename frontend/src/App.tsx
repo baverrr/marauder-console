@@ -9,6 +9,7 @@ import { HistoryView } from "@/components/HistoryView";
 import { CapturesView } from "@/components/CapturesView";
 import { WardriveMapView } from "@/components/WardriveMapView";
 import { FindMyView } from "@/components/FindMyView";
+import { CameraScanView } from "@/components/CameraScanView";
 import { AssistantView } from "@/components/AssistantView";
 import { useBridge } from "@/lib/bridge";
 import { CATEGORIES, TOOLS_BY_CATEGORY, type CategoryId } from "@/tools";
@@ -91,6 +92,8 @@ export default function App() {
                   onStart={(command) => void bridge.send(command)}
                   onStop={stopAll}
                 />
+              ) : analysisSel === "cameras" ? (
+                <CameraScanView />
               ) : analysisSel === "captures" ? (
                 <CapturesView />
               ) : analysisSel === "map" ? (

@@ -70,18 +70,26 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from RSSI
   is rough by nature, so it leans on bands and trend over false precision; the 1 m reference and
   environment are adjustable. Parsing only — the ESP32 does the sensing. A **Scan for** selector picks
-  what to listen for: **Find My** (`sniffbt -t airtag`), **iBeacon**, **Flipper**, **Flock**, or
-  **All BLE** (`recon ble` — every BLE device in range). A **Raw** toggle (on by default) makes Start
+  what to listen for: **Find My** (`sniffbt -t airtag`), **iBeacon**, **Flipper**, **Flock**, **Cameras**,
+  or **All BLE** (`recon ble` — every BLE device in range). A **Raw** toggle (on by default) makes Start
   request the custom raw-capture firmware's advert dump (`… -raw`, see
   [`firmware/custom-rawadv/`](firmware/custom-rawadv)); the radar then also decodes each device's raw BLE
   advertisement and **says what it is** — a Find My tracker (with battery level and whether it's
   *separated* from its owner or the owner's nearby), an iBeacon (UUID / major / minor), AirPods / Beats, a
-  Tile, or a named vendor device — from the Apple (`0x004C`) continuity messages, company id and service
+  Tile, a **likely camera** (matched by its advertised name — Reolink, Wyze, Ring, Flock… — with a
+  confidence), or a named vendor device — from the Apple (`0x004C`) continuity messages, company id and service
   UUIDs. Each device shows an identity chip in the list (separated trackers flagged in amber, the "is
   something following me" case), with the decoded Find My status byte in the homing panel. Every scan
   mode — including All BLE (`recon ble -raw`) — supports the raw decode with the custom firmware. With
   stock firmware those raw bytes aren't available (turn Raw off) and the radar works from signal strength
   alone.
+- **Camera scan (PC-side)** — also under the **Analysis** tab, a network sweep that finds IP cameras on
+  your local network and lists each one's **address, vendor and open ports**. It runs from the PC with no
+  board needed, using **ONVIF** discovery and **mDNS** plus a quick check of known camera ports
+  (RTSP 554, Dahua, Hikvision and friends), and scores each host with a confidence and the reasons behind
+  it. It **actively probes your network**, so it only runs when you press **Scan my network** — never on
+  its own, and the assistant can't trigger it. Where the radar finds cameras *broadcasting* nearby over
+  BLE, this finds the ones *on your network*.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
   commands into a staging area; it never runs them — you review each one (with a **transmits** flag on
