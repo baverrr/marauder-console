@@ -1,32 +1,51 @@
 # Custom firmware: green board LED, optional purple/green (CYD)
 
 A small, opt-in patch that holds the RGB LED on the back of the CYD (`MARAUDER_CYD_MICRO`, 2432S028)
-**solid green**, or, with one constant flipped, **alternates purple and green** once a second.
+**solid green** while the board is idle, or, with one constant flipped, **alternates purple and green**
+once a second. During a scan the LED still shows the stock **blue (sniffing)** and **red (attacking)**.
 
 > [!IMPORTANT]
 > This is a **modified** build, independent of the bundled upstream binaries in
 > [`../cyd_2432S028/`](../cyd_2432S028) (which stay byte-for-byte unmodified and are verified by
 > [`scripts/verify-firmware-upstream.sh`](../../scripts/verify-firmware-upstream.sh)). It touches a
 > different file from the [raw-advert](../custom-rawadv/) and [screensaver](../custom-screensaver/)
-> patches, so all three apply cleanly together. Don't commit built binaries over the bundled ones.
+> patches, so all three apply cleanly together; CI checks this on every pull request and push to `main`.
+> Don't commit built binaries over the bundled ones.
 
 ## What the patch does
 
 [`led-v1.20.0.patch`](led-v1.20.0.patch) — against upstream **v1.20.0** (commit `511bb369`), touching
-only `flipperLED.cpp`, the driver the CYD build uses for its LED (red on GPIO 4, green on GPIO 16, blue on
-GPIO 17, common-anode so a pin driven LOW lights it):
+only `flipperLED.cpp`, the driver the CYD build uses for its LED. The LED is common-anode, so a pin driven
+LOW lights it. On the CYD 2432S028 red is GPIO 4, green GPIO 16 and blue GPIO 17:
 
 - **PWM instead of on/off** — every LED write goes through one `marauderSetRGB(r, g, b)` helper using
   `analogWrite`, so colours can be mixed. (On core 2.x a pin attached to PWM ignores `digitalWrite`, so the
-  stock boot flash and scan colours are moved onto the same helper.)
-- **`flipperLED::main()`** — stock does nothing here; the patch sets the LED once per `LED_ALTERNATE_MS`
-  tick (default `1000`): solid green, or purple and green in turn when `LED_ALTERNATE` is `true`.
+  stock boot flash and scan colours are moved onto the same helper.) The helper remembers each channel's
+  level and skips writes that change nothing, because on core 2.x every `analogWrite` call reconfigures
+  the PWM timer.
+- **Scan colours kept** — `sniffLED()`, `attackLED()` and `offLED()` record whether a scan is running.
+  The custom colour shows only while idle, so the LED is blue for the whole of a sniff and red for the
+  whole of an attack, and goes back to the idle colour as soon as the scan stops.
+- **`flipperLED::main()`** — stock does nothing here; the patch checks the LED once per `LED_ALTERNATE_MS`
+  tick (default `1000`): solid green when idle, or purple and green in turn when `LED_ALTERNATE` is `true`.
 - **`EnableLED` setting is respected** — with the LED turned off in Marauder's Settings, it stays dark.
-  The setting is checked each tick, so turning it off takes effect within a second.
+  The setting is checked each tick, so turning it off or on takes effect within a second.
 
-**Trade-off:** stock firmware shows **blue while sniffing** and **red while attacking**. Those colours
-still come on when a scan starts, but the patch's colour takes over again at the next tick (within a
-second), so the LED no longer works as a scan indicator.
+<details>
+<summary>Other boards that build this driver</summary>
+
+`flipperLED.cpp` is used by every board that defines `HAS_FLIPPER_LED`, so the patch changes all of them,
+not just the CYD. The pins come from upstream `configs.h`:
+
+| Board define | Red | Green | Blue |
+|---|---|---|---|
+| `MARAUDER_CYD_MICRO`, `MARAUDER_CYD_2USB`, `MARAUDER_CYD_GUITION` | 4 | 16 | 17 |
+| `MARAUDER_CYD_3_5_INCH` | 22 | 16 | 17 |
+| `MARAUDER_FLIPPER`, `MARAUDER_MULTIBOARD_S3` | 6 | 5 | 4 |
+
+Stock drives all of them active-low, and so does the patch. It has only been built and checked on
+`MARAUDER_CYD_MICRO`.
+</details>
 
 ### Purple needs a working red channel
 
@@ -37,12 +56,12 @@ never appears, purple just shows as blue. That's why the default is solid green 
 
 ### Tuning
 
-Before building, in `flipperLED::main()`:
+Before building, at the top of `flipperLED.cpp`:
 
 | Constant | Default | Effect |
 |---|---|---|
 | `LED_ALTERNATE` | `false` | `true` alternates purple and green; `false` holds solid green. |
-| `LED_ALTERNATE_MS` | `1000` | Switch speed, and how quickly a scan colour is overwritten. |
+| `LED_ALTERNATE_MS` | `1000` | Switch speed, and how often the `EnableLED` setting is checked. |
 | `PURPLE_B` | `64` | Blue in the purple (0–255): raise for bluer, lower for pinker. `PURPLE_R` stays at 255. |
 
 ## Building and flashing
