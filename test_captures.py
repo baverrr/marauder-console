@@ -69,6 +69,37 @@ def test_wigle_parses_located_points_and_skips_no_fix() -> None:
     assert empty["count"] == 0 and empty["bounds"] is None
 
 
+_WIGLE_HEADER = (
+    "WigleWifi-1.4,appRelease=1,model=x,release=1,device=x,display=x,board=x,brand=x\n"
+    "MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,"
+    "AccuracyMeters,Type\n"
+)
+
+
+def _wigle_row(ssid: str, rssi: str, lat: str, lon: str) -> str:
+    return f"00:00:5e:00:53:01,{ssid},[WPA2],2026-01-01 00:00:00,6,{rssi},{lat},{lon},0,5,WIFI\n"
+
+
+def test_wigle_drops_non_finite_and_out_of_range_rows(tmp_path) -> None:
+    path = tmp_path / "w.csv"
+    path.write_text(
+        _WIGLE_HEADER
+        + _wigle_row("Good", "nan", "0.001", "0.002")
+        + _wigle_row("NanLat", "-50", "nan", "0.002")
+        + _wigle_row("InfLon", "-50", "0.001", "inf")
+        + _wigle_row("OutOfRange", "-50", "999", "0.002")
+    )
+    data = parse_wigle(path)
+    assert [p["ssid"] for p in data["points"]] == ["Good"]
+    assert data["points"][0]["rssi"] is None  # a non-finite RSSI becomes "unknown", not NaN
+
+    # The endpoint must return JSON (NaN isn't valid JSON, so it used to fail with a 500).
+    app = create_app(mock=True, data_dir=tmp_path / "data", captures_dir=tmp_path)
+    with TestClient(app) as c:
+        resp = c.get("/api/captures/w.csv/wardrive")
+        assert resp.status_code == 200 and resp.json()["count"] == 1
+
+
 def test_capture_endpoints(tmp_path) -> None:
     app = create_app(mock=True, data_dir=tmp_path, captures_dir=FIXTURES)
     with TestClient(app) as c:

@@ -90,6 +90,13 @@ fn log_stdio(cmd: &mut Command, log_path: &Option<PathBuf>) {
     cmd.stdout(Stdio::null()).stderr(Stdio::null());
 }
 
+/// Stop a bridge we spawned that never started listening. Dropping a `Child` doesn't kill it, so without
+/// this it would keep running (and later bind its port) after we've fallen through to another option.
+fn reap(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 /// Resolve a bridge and (if we spawn it) return the child. See the module docs for the order.
 fn start_bridge(log_path: &Option<PathBuf>) -> (String, Option<Child>) {
     // 1) Attach to an externally-managed bridge.
@@ -113,11 +120,12 @@ fn start_bridge(log_path: &Option<PathBuf>) -> (String, Option<Child>) {
                 let mut cmd = Command::new(&sidecar);
                 cmd.args(bridge_args(port));
                 log_stdio(&mut cmd, log_path);
-                if let Ok(child) = cmd.spawn() {
+                if let Ok(mut child) = cmd.spawn() {
                     // The one-file PyInstaller sidecar self-extracts on first launch, so allow extra time.
                     if wait_until_listening(port, Duration::from_secs(30)) {
                         return (format!("http://127.0.0.1:{port}"), Some(child));
                     }
+                    reap(&mut child);
                 }
             }
         }
@@ -135,10 +143,11 @@ fn start_bridge(log_path: &Option<PathBuf>) -> (String, Option<Child>) {
         let mut cmd = Command::new(&python);
         cmd.arg(&bridge).args(bridge_args(port));
         log_stdio(&mut cmd, log_path);
-        if let Ok(child) = cmd.spawn() {
+        if let Ok(mut child) = cmd.spawn() {
             if wait_until_listening(port, Duration::from_secs(20)) {
                 return (format!("http://127.0.0.1:{port}"), Some(child));
             }
+            reap(&mut child);
         }
     }
 

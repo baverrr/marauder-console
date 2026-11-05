@@ -64,7 +64,8 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   BSSIDs seen) from a dependency-free parser. Inspection only — no injection, nothing transmitted.
 - **Wardrive map (PC-side)** — plots the located access points from a Wigle wardrive CSV on an offline,
   self-contained point map (coloured by signal strength, with per-point details). No map tiles are
-  fetched, so your route is never sent anywhere; rows without a GPS fix are skipped.
+  fetched, so your route is never sent anywhere; rows without a GPS fix, or with corrupt coordinates, are
+  skipped.
 - **Find My radar (PC-side)** — under the **Analysis** tab, turns a BLE sniff into a live, nearest-first
   list of detected devices with an estimated distance (from signal strength), a proximity band
   (Immediate / Near / Far) and a closer/farther trend, plus a per-device homing panel. Distance from RSSI
@@ -88,7 +89,8 @@ Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python brid
   board needed, using **ONVIF** discovery and **mDNS** plus a quick check of known camera ports
   (RTSP 554, Dahua, Hikvision and friends), and scores each host with a confidence and the reasons behind
   it. It **actively probes your network**, so it only runs when you press **Scan my network** — never on
-  its own, and the assistant can't trigger it. Where the radar finds cameras *broadcasting* nearby over
+  its own, and the assistant can't trigger it. The port check only goes to the address each reply came
+  from, only to private or link-local addresses, and to at most 256 hosts, 16 at a time. Where the radar finds cameras *broadcasting* nearby over
   BLE, this finds the ones *on your network*.
 - **Claude assistant — advise & draft only** — under the **Assistant** tab, chat with Claude about
   commands, output and captures. It reads live status and your capture files (read-only) and *proposes*
@@ -299,7 +301,7 @@ marauder-console/
 | Concern | Approach |
 |---|---|
 | Serial ownership | The Python bridge is the single owner of the port. The browser never touches it. The port is opened on **Connect** and closed on **Disconnect**, keeping `/dev/ttyUSB0` free otherwise. |
-| Live output | The bridge reads serial lines and fans them out to every connected browser over a WebSocket, with a short replay buffer for late joiners. |
+| Live output | The bridge reads serial lines and fans them out to every connected browser over a WebSocket, with a short replay buffer for late joiners. A client that stops reading for 5 s is dropped, so it can't stall the stream for everyone else. |
 | Commands | Sent over plain HTTP `POST /api/command`; the bridge also tracks running/stopped state for streaming commands. A command must be one line: newlines and other control characters are rejected (400), so one request, or one staged proposal, can never become two commands on the board. |
 | Reference offline | The tool map is static data compiled into the frontend, so the docs render with the bridge disconnected (or no board at all). |
 | Mock board | `serial_source.MockSerialSource` fakes Marauder's `help`/`info` and streams generic placeholder lines for scan/sniff commands until `stopscan`. |
