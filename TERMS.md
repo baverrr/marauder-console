@@ -38,7 +38,7 @@ and hardware have their own licenses, terms and authors; those apply to them, no
 ## 4. Third-party software
 
 The app uses other software covered by its own licenses, including (bridge) FastAPI, Uvicorn,
-pyserial and pyserial-asyncio, and (frontend) React, Tailwind CSS, lucide-react and
+pyserial and pyserial-asyncio-fast, and (frontend) React, Tailwind CSS, lucide-react and
 shadcn/ui-style components. Those licenses apply to those components. The ESP32 Marauder firmware
 on the board is a separate project with its own license and terms.
 

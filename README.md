@@ -276,7 +276,7 @@ can't connect, stop or disconnect the board or start a camera scan. Requests wit
 ```
 marauder-console/
 ├── bridge.py                 # FastAPI bridge: HTTP + WebSocket, owns the serial port
-├── serial_source.py          # Real (pyserial-asyncio) and mock serial sources
+├── serial_source.py          # Real (pyserial-asyncio-fast) and mock serial sources
 ├── test_bridge.py            # Tests, all against the mock source
 ├── requirements.txt
 ├── install.sh                # User-local installer (venv + frontend build + launcher)
@@ -300,7 +300,7 @@ marauder-console/
 
 | Concern | Approach |
 |---|---|
-| Serial ownership | The Python bridge is the single owner of the port. The browser never touches it. The port is opened on **Connect** and closed on **Disconnect**, keeping `/dev/ttyUSB0` free otherwise. |
+| Serial ownership | The Python bridge is the single owner of the port. The browser never touches it. The port is opened on **Connect** and closed on **Disconnect**, keeping `/dev/ttyUSB0` free otherwise. Only local serial device names (`/dev/…`, `COM3`) are accepted, never pyserial URLs such as `socket://`, so the bridge can't be told to open network connections. |
 | Live output | The bridge reads serial lines and fans them out to every connected browser over a WebSocket, with a short replay buffer for late joiners. A client that stops reading for 5 s is dropped, so it can't stall the stream for everyone else. |
 | Commands | Sent over plain HTTP `POST /api/command`; the bridge also tracks running/stopped state for streaming commands. A command must be one line: newlines and other control characters are rejected (400), so one request, or one staged proposal, can never become two commands on the board. |
 | Reference offline | The tool map is static data compiled into the frontend, so the docs render with the bridge disconnected (or no board at all). |

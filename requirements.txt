@@ -2,7 +2,8 @@
 fastapi>=0.132
 uvicorn[standard]>=0.27
 pyserial>=3.5
-pyserial-asyncio>=0.6
+# Maintained fork of pyserial-asyncio (same API, module serial_asyncio_fast).
+pyserial-asyncio-fast>=0.16
 pydantic>=2.6
 # Claude assistant (Phase 4): the Anthropic SDK drives the advise/draft tool loop; keyring stores the
 # API key in the OS keychain. Both import lazily, so the bridge still runs without a key or a keychain.

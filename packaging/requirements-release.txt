@@ -706,10 +706,10 @@ pyserial==3.5 \
     --hash=sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0
     # via
     #   -r packaging/../requirements.txt
-    #   pyserial-asyncio
-pyserial-asyncio==0.6 \
-    --hash=sha256:b6032923e05e9d75ec17a5af9a98429c46d2839adfaf80604d52e0faacd7a32f \
-    --hash=sha256:de9337922619421b62b9b1a84048634b3ac520e1d690a674ed246a2af7ce1fc5
+    #   pyserial-asyncio-fast
+pyserial-asyncio-fast==0.16 \
+    --hash=sha256:88939d94e341a04c0c8bc3c1ed4e874439cb5a1e21ccfb0fd7315a8e45df1687 \
+    --hash=sha256:fd52643380406739d777014b0aea0873d756b542eb62f7556567239cec007115
     # via -r packaging/../requirements.txt
 pytest==9.2.0 \
     --hash=sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588 \

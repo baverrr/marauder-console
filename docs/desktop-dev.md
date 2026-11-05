@@ -61,7 +61,11 @@ MARAUDER_CONSOLE_MOCK=1 cargo run --manifest-path src-tauri/Cargo.toml
 How the shell finds the bridge, in order: `MARAUDER_BRIDGE_URL` → a bundled `marauder-bridge` sidecar next
 to the app binary → `./venv` from the source tree (dev) → `http://127.0.0.1:8200`. Env knobs when the shell
 spawns it: `MARAUDER_CONSOLE_MOCK=1`, `MARAUDER_CONSOLE_SERIAL_PORT=/dev/ttyUSBx`. The resolved URL is
-injected into the web UI as `window.__MARAUDER_BRIDGE_URL__` before the page loads.
+injected into the web UI as `window.__MARAUDER_BRIDGE_URL__` before the page loads. `MARAUDER_BRIDGE_URL` must be
+a loopback address (`http://127.0.0.1:<port>` or `http://localhost:<port>`), because the window's content
+security policy only allows connections there; any other value is ignored with a warning on stderr. To use
+the app against a bridge on another machine, open its web UI in a browser instead (see *Behind a reverse
+proxy* in the README).
 
 Packaging the sidecar (not needed for dev): `bash scripts/build-sidecar.sh` builds
 `src-tauri/binaries/marauder-bridge-<triple>`; then add `"externalBin": ["binaries/marauder-bridge"]` to

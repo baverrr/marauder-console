@@ -23,7 +23,8 @@ ok "1/4  Build the release binary (via the Tauri CLI)"
 # dev server (http://localhost:5173) instead of the bundled UI, so the installed app just shows
 # "Could not connect to localhost" unless a dev server happens to be running. The CLI also runs the
 # configured beforeBuildCommand (the frontend build), so a separate `npm run build` is not needed.
-"$REPO/frontend/node_modules/.bin/tauri" build --no-bundle
+# Stop on a failed build: otherwise an older binary left in target/release would be installed instead.
+"$REPO/frontend/node_modules/.bin/tauri" build --no-bundle || { warn "the Tauri build failed — nothing installed."; exit 1; }
 BIN="$REPO/src-tauri/target/release/marauder-console"
 [ -x "$BIN" ] || { warn "binary not found at $BIN — did the build fail?"; exit 1; }
 
@@ -41,7 +42,18 @@ ok "3/4  Install launcher"
 APPS="$HOME/.local/share/applications"
 mkdir -p "$APPS"
 DEST="$APPS/marauder-console.desktop"
-sed "s#@EXEC@#${BIN}#" "$REPO/packaging/marauder-console.desktop.in" > "$DEST"
+# Quote the path for the Exec key (Desktop Entry spec), so a checkout path with spaces or other special
+# characters still launches: escape \ " ` $ inside double quotes, then escape \ again (the key's own
+# string escaping) and % (field codes). Substitute with bash, not sed, so nothing in the path is a pattern.
+exec_arg=${BIN//\\/\\\\}
+exec_arg=${exec_arg//\"/\\\"}
+exec_arg=${exec_arg//\`/\\\`}
+exec_arg=${exec_arg//\$/\\\$}
+exec_arg="\"${exec_arg}\""
+exec_arg=${exec_arg//\\/\\\\}
+exec_arg=${exec_arg//%/%%}
+template=$(<"$REPO/packaging/marauder-console.desktop.in")
+printf '%s\n' "${template//@EXEC@/"$exec_arg"}" > "$DEST"
 chmod +x "$DEST"
 command -v desktop-file-validate >/dev/null 2>&1 && desktop-file-validate "$DEST" || true
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS" 2>/dev/null || true

@@ -9,7 +9,9 @@
 //! existing same-origin client code can target the bridge no matter what origin the webview runs on.
 //!
 //! Bridge resolution, in order:
-//!   1. `MARAUDER_BRIDGE_URL` env var — attach to an already-running bridge, spawn nothing.
+//!   1. `MARAUDER_BRIDGE_URL` env var — attach to an already-running bridge, spawn nothing. Loopback only
+//!      (`http://127.0.0.1:…` / `http://localhost:…`): the window's CSP blocks any other host, so another
+//!      value is ignored with a warning rather than loading a UI whose every request fails.
 //!   2. A bundled `marauder-bridge` sidecar next to this executable (production) — spawn it on a free port.
 //!   3. The source venv (`../venv/bin/python ../bridge.py`) relative to this crate (development).
 //!   4. Fall back to `http://127.0.0.1:8200` and assume the user started the bridge themselves.
@@ -90,6 +92,21 @@ fn log_stdio(cmd: &mut Command, log_path: &Option<PathBuf>) {
     cmd.stdout(Stdio::null()).stderr(Stdio::null());
 }
 
+/// True for `http://127.0.0.1[:port]` or `http://localhost[:port]` (optionally with a path): the only
+/// bridge URLs the window's CSP `connect-src` lets the UI reach.
+fn is_loopback_bridge_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split('/').next().unwrap_or("");
+    let (host, port) = match authority.split_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (authority, None),
+    };
+    let port_ok = port.map_or(true, |p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    matches!(host, "127.0.0.1" | "localhost") && port_ok
+}
+
 /// Stop a bridge we spawned that never started listening. Dropping a `Child` doesn't kill it, so without
 /// this it would keep running (and later bind its port) after we've fallen through to another option.
 fn reap(child: &mut Child) {
@@ -102,7 +119,13 @@ fn start_bridge(log_path: &Option<PathBuf>) -> (String, Option<Child>) {
     // 1) Attach to an externally-managed bridge.
     if let Ok(url) = std::env::var("MARAUDER_BRIDGE_URL") {
         if !url.is_empty() {
-            return (url.trim_end_matches('/').to_string(), None);
+            if is_loopback_bridge_url(&url) {
+                return (url.trim_end_matches('/').to_string(), None);
+            }
+            eprintln!(
+                "marauder-console: ignoring MARAUDER_BRIDGE_URL={url}: only http://127.0.0.1:<port> or \
+                 http://localhost:<port> is allowed by the window's content security policy"
+            );
         }
     }
 
@@ -261,4 +284,26 @@ fn main() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_loopback_bridge_url;
+
+    #[test]
+    fn bridge_url_must_be_loopback() {
+        for ok in ["http://127.0.0.1:8200", "http://localhost:8200/", "http://127.0.0.1"] {
+            assert!(is_loopback_bridge_url(ok), "{ok}");
+        }
+        for bad in [
+            "https://marauder.example",
+            "http://192.0.2.1:8200",
+            "http://127.0.0.1.example:8200",
+            "http://localhost:80ab",
+            "http://localhost:",
+            "ws://127.0.0.1:8200",
+        ] {
+            assert!(!is_loopback_bridge_url(bad), "{bad}");
+        }
+    }
 }
