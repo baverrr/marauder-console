@@ -156,7 +156,8 @@ async def _probe_ports(ip: str, ports: tuple[int, ...], timeout: float) -> list[
 
     async def check(port: int) -> int | None:
         try:
-            _, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
+            async with asyncio.timeout(timeout):
+                _, writer = await asyncio.open_connection(ip, port)
         except (TimeoutError, OSError):
             return None
         writer.close()

@@ -333,7 +333,10 @@ class SerialManager:
     @staticmethod
     async def _send(ws: WebSocket, payload: str) -> bool:
         try:
-            await asyncio.wait_for(ws.send_text(payload), WS_SEND_TIMEOUT)
+            # asyncio.timeout, not wait_for: on Python 3.11 wait_for can swallow a cancel that lands as the
+            # send completes, which left a disconnect waiting forever on a pump that never stopped.
+            async with asyncio.timeout(WS_SEND_TIMEOUT):
+                await ws.send_text(payload)
         except Exception:  # noqa: BLE001 - client went away or is too slow
             return False
         return True
@@ -342,7 +345,8 @@ class SerialManager:
     async def _close_quietly(ws: WebSocket) -> None:
         # The client's own /ws handler then sees the disconnect and exits.
         with contextlib.suppress(Exception):
-            await asyncio.wait_for(ws.close(code=1011), WS_SEND_TIMEOUT)
+            async with asyncio.timeout(WS_SEND_TIMEOUT):
+                await ws.close(code=1011)
 
 
 def create_app(

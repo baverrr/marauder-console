@@ -484,24 +484,36 @@ def test_real_source_accepts_serial_port_names(port: str) -> None:
 async def test_real_source_round_trip_over_a_pty() -> None:
     # Exercises pyserial-asyncio-fast end to end against a pseudo-terminal standing in for the board.
     import os
+    import select
+    import time
     import tty
 
     from serial_source import RealSerialSource
+
+    def read_until(fd: int, end: bytes, timeout: float) -> bytes:
+        # select() with a deadline, never a bare blocking read: a lost write must fail the test, not hang it.
+        deadline = time.monotonic() + timeout
+        buf = b""
+        while not buf.endswith(end):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError(f"no {end!r} from the serial side; got {buf!r}")
+            if select.select([fd], [], [], left)[0]:
+                buf += os.read(fd, 64)
+        return buf
 
     board, port_fd = os.openpty()
     tty.setraw(board)
     src = RealSerialSource(port=os.ttyname(port_fd), baud=115200)
     try:
-        await src.open()
-        await src.write_line("info")
-        got = b""
-        while not got.endswith(b"\r\n"):
-            got += await asyncio.to_thread(os.read, board, 64)
+        await asyncio.wait_for(src.open(), timeout=5)
+        await asyncio.wait_for(src.write_line("info"), timeout=5)
+        got = await asyncio.to_thread(read_until, board, b"\r\n", 5)
         assert got == b"info\r\n"
         os.write(board, b"Firmware version: test\r\n")
-        line = await asyncio.wait_for(anext(src.lines()), timeout=2)
+        line = await asyncio.wait_for(anext(src.lines()), timeout=5)
         assert "Firmware version: test" in line
     finally:
-        await src.close()
+        await asyncio.wait_for(src.close(), timeout=5)
         os.close(board)
         os.close(port_fd)
