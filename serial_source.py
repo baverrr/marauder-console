@@ -204,7 +204,9 @@ class MockSerialSource(SerialSource):
     async def lines(self) -> AsyncIterator[str]:
         while self._open and self._queue is not None:
             try:
-                line = await asyncio.wait_for(self._queue.get(), timeout=0.5)
+                # asyncio.timeout rather than wait_for, which on 3.11 can drop a cancel (and the line it got).
+                async with asyncio.timeout(0.5):
+                    line = await self._queue.get()
             except TimeoutError:
                 continue
             yield line
