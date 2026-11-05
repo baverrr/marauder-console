@@ -84,6 +84,45 @@ def test_command_requires_connection(client: TestClient) -> None:
     assert resp.status_code == 409  # not connected
 
 
+def test_command_with_newline_is_rejected(client: TestClient) -> None:
+    # "\n" inside a command would reach the board as a second command line.
+    client.post("/api/connect")
+    resp = client.post("/api/command", json={"command": "info\nattack -t deauth"})
+    assert resp.status_code == 400
+    assert client.get("/api/status").json()["running"] is False
+
+
+@pytest.mark.parametrize("path", ["/api/connect", "/api/disconnect", "/api/stop", "/api/cameras/scan"])
+def test_state_changing_post_rejects_a_foreign_origin(client: TestClient, path: str) -> None:
+    # A body-less POST needs no CORS preflight, so the bridge must check Origin itself (drive-by CSRF).
+    resp = client.post(path, headers={"Origin": "https://evil.example"})
+    assert resp.status_code == 403
+    assert client.get("/api/status").json()["connected"] is False
+
+
+def test_foreign_origin_cannot_send_a_command(client: TestClient) -> None:
+    client.post("/api/connect")
+    resp = client.post("/api/command", json={"command": "scanall"}, headers={"Origin": "null"})
+    assert resp.status_code == 403
+    assert client.get("/api/status").json()["running"] is False
+
+
+def test_allowed_or_missing_origin_can_post(client: TestClient) -> None:
+    assert client.post("/api/connect", headers={"Origin": "tauri://localhost"}).status_code == 200
+    assert client.post("/api/disconnect", headers={"Origin": "http://127.0.0.1:8200"}).status_code == 200
+    assert client.post("/api/connect").status_code == 200  # no Origin: a native client such as curl
+    # Reads stay open to any origin (CORS still keeps a foreign page from seeing the response).
+    assert client.get("/api/status", headers={"Origin": "https://evil.example"}).status_code == 200
+
+
+def test_cors_preflight_still_works(client: TestClient) -> None:
+    resp = client.options(
+        "/api/command",
+        headers={"Origin": "tauri://localhost", "Access-Control-Request-Method": "POST"},
+    )
+    assert resp.status_code == 200
+
+
 def test_streaming_sets_and_clears_running(client: TestClient) -> None:
     client.post("/api/connect")
     client.post("/api/command", json={"command": "scanall"})
@@ -371,3 +410,110 @@ async def test_manager_disconnect_releases_source() -> None:
     assert mgr.connected is False
     with pytest.raises(SerialError):
         await mgr.send_command("info")
+
+
+class _FakeWs:
+    """Stands in for a websocket: records what it was sent, or never finishes sending (a stalled client)."""
+
+    def __init__(self, *, stalled: bool = False) -> None:
+        self.stalled = stalled
+        self.sent: list[str] = []
+        self.closed = False
+
+    async def send_text(self, payload: str) -> None:
+        if self.stalled:
+            await asyncio.Event().wait()  # never returns
+        self.sent.append(payload)
+
+    async def close(self, code: int = 1000) -> None:
+        self.closed = True
+
+
+async def test_stalled_websocket_client_is_dropped_without_blocking_others(monkeypatch) -> None:
+    import bridge
+
+    monkeypatch.setattr(bridge, "WS_SEND_TIMEOUT", 0.05)
+    mgr = SerialManager(mock=True, port="mock://x", baud=115200)
+    fast, slow = _FakeWs(), _FakeWs(stalled=True)
+    mgr._clients.update({fast, slow})  # type: ignore[arg-type]
+
+    await asyncio.wait_for(mgr._broadcast({"type": "line", "data": "hello"}), timeout=2)
+
+    assert len(fast.sent) == 1
+    assert slow not in mgr._clients and fast in mgr._clients
+    await asyncio.sleep(0)  # let the background close run
+    assert slow.closed is True
+
+
+async def test_stale_failure_does_not_close_a_new_connection() -> None:
+    # Unplug → quick Disconnect + Connect while the old failure is still broadcasting: the old teardown
+    # must leave the new connection alone.
+    mgr = SerialManager(mock=True, port="mock://x", baud=115200)
+    await mgr.connect(None, None)
+    old = mgr.source
+    await mgr.disconnect()
+    await mgr.connect(None, None)
+    await mgr._fail("the board closed the connection", old)
+    assert mgr.connected is True
+    await mgr._fail("lost the serial stream", mgr.source)
+    assert mgr.connected is False
+
+
+@pytest.mark.parametrize(
+    "port", ["socket://192.0.2.1:7000", "rfc2217://192.0.2.1:7000", "loop://", "/dev/../tmp/x", "tty", "COM"]
+)
+def test_real_source_rejects_non_serial_port_names(port: str) -> None:
+    from bridge import InvalidPortError
+
+    mgr = SerialManager(mock=False, port="/dev/ttyUSB0", baud=115200)
+    with pytest.raises(InvalidPortError):
+        mgr._make_source(port, None)
+
+
+@pytest.mark.parametrize(
+    "port", ["/dev/ttyUSB0", "/dev/ttyACM1", "/dev/serial/by-id/usb-Silicon_Labs-if00", "COM3"]
+)
+def test_real_source_accepts_serial_port_names(port: str) -> None:
+    from serial_source import RealSerialSource
+
+    mgr = SerialManager(mock=False, port="/dev/ttyUSB0", baud=115200)
+    assert isinstance(mgr._make_source(port, None), RealSerialSource)
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "openpty"), reason="needs a POSIX pseudo-terminal")
+async def test_real_source_round_trip_over_a_pty() -> None:
+    # Exercises pyserial-asyncio-fast end to end against a pseudo-terminal standing in for the board.
+    import os
+    import select
+    import time
+    import tty
+
+    from serial_source import RealSerialSource
+
+    def read_until(fd: int, end: bytes, timeout: float) -> bytes:
+        # select() with a deadline, never a bare blocking read: a lost write must fail the test, not hang it.
+        deadline = time.monotonic() + timeout
+        buf = b""
+        while not buf.endswith(end):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError(f"no {end!r} from the serial side; got {buf!r}")
+            if select.select([fd], [], [], left)[0]:
+                buf += os.read(fd, 64)
+        return buf
+
+    board, port_fd = os.openpty()
+    tty.setraw(board)
+    src = RealSerialSource(port=os.ttyname(port_fd), baud=115200)
+    try:
+        await asyncio.wait_for(src.open(), timeout=5)
+        await asyncio.wait_for(src.write_line("info"), timeout=5)
+        got = await asyncio.to_thread(read_until, board, b"\r\n", 5)
+        assert got == b"info\r\n"
+        os.write(board, b"Firmware version: test\r\n")
+        line = await asyncio.wait_for(anext(src.lines()), timeout=5)
+        assert "Firmware version: test" in line
+    finally:
+        await asyncio.wait_for(src.close(), timeout=5)
+        os.close(board)
+        os.close(port_fd)

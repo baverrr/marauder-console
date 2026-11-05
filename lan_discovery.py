@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ipaddress
 import re
 import socket
 import time
@@ -29,7 +30,10 @@ WS_DISCOVERY_ADDR = ("239.255.255.250", 3702)
 DEFAULT_TIMEOUT = 4.0
 _PROBE_PORTS = tuple(sorted(camera_classifier.CAMERA_PORTS))
 
-_XADDR_RE = re.compile(r"https?://(\[?[0-9A-Fa-f:.]+\]?)(?::\d+)?/", re.I)
+# Bounds on the follow-up TCP probe: a device answering the multicast with many fake records (or mDNS
+# announcing many addresses) must not turn one scan into a port scan of arbitrary hosts.
+MAX_HOSTS = 256
+_PROBE_CONCURRENCY = 16
 _SCOPES_RE = re.compile(r"<[^>]*Scopes[^>]*>(.*?)</[^>]*Scopes>", re.I | re.S)
 _NAME_SCOPE_RE = re.compile(r"onvif://www\.onvif\.org/name/(\S+)", re.I)
 
@@ -81,10 +85,9 @@ def _ws_discovery(timeout: float) -> list[dict]:
             except OSError:
                 break
             text = data.decode("utf-8", "replace")
+            # Use the address the reply came from, not the XAddrs inside it: that text is whatever the
+            # responder chose to write, so trusting it would let any device point the probe at any host.
             ip = addr[0]
-            xaddr = _XADDR_RE.search(text)
-            if xaddr:
-                ip = xaddr.group(1).strip("[]")
             scopes_match = _SCOPES_RE.search(text)
             scopes = " ".join(scopes_match.group(1).split()) if scopes_match else ""
             found[ip] = {"ip": ip, "onvif": True, "scopes": scopes, "name": _name_from_scopes(scopes)}
@@ -137,12 +140,24 @@ def _mdns_browse(timeout: float) -> list[dict]:
     return list(hosts.values())
 
 
+def _is_lan_address(ip: str) -> bool:
+    """True for a private or link-local unicast address: the only kind a LAN camera scan should probe."""
+    try:
+        addr = ipaddress.ip_address(ip.split("%", 1)[0])  # drop an IPv6 zone such as fe80::1%eth0
+    except ValueError:
+        return False
+    if addr.is_loopback or addr.is_multicast or addr.is_unspecified:
+        return False
+    return addr.is_private or addr.is_link_local
+
+
 async def _probe_ports(ip: str, ports: tuple[int, ...], timeout: float) -> list[int]:
     """Return which of ``ports`` accept a TCP connection on ``ip`` (short timeout, concurrent)."""
 
     async def check(port: int) -> int | None:
         try:
-            _, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
+            async with asyncio.timeout(timeout):
+                _, writer = await asyncio.open_connection(ip, port)
         except (TimeoutError, OSError):
             return None
         writer.close()
@@ -178,10 +193,14 @@ async def discover_cameras(timeout: float | None = None) -> list[dict]:
             if svc not in host["mdns_services"]:
                 host["mdns_services"].append(svc)
 
+    # Only probe addresses on the local network, and at most MAX_HOSTS of them.
+    targets = [host for host in hosts.values() if _is_lan_address(host["ip"])][:MAX_HOSTS]
     probe_timeout = min(1.0, window / 2)
+    limit = asyncio.Semaphore(_PROBE_CONCURRENCY)
 
     async def enrich(host: dict) -> dict:
-        ports = await _probe_ports(host["ip"], _PROBE_PORTS, probe_timeout)
+        async with limit:
+            ports = await _probe_ports(host["ip"], _PROBE_PORTS, probe_timeout)
         vendor = camera_classifier.vendor_for_mac(host.get("mac"))
         verdict = camera_classifier.classify(
             onvif=host["onvif"],
@@ -202,6 +221,6 @@ async def discover_cameras(timeout: float | None = None) -> list[dict]:
             "reasons": verdict["reasons"],
         }
 
-    records = await asyncio.gather(*(enrich(host) for host in hosts.values()))
+    records = await asyncio.gather(*(enrich(host) for host in targets))
     records.sort(key=lambda r: (not r["is_camera"], r["ip"]))
     return list(records)

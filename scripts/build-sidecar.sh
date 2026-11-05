@@ -43,7 +43,7 @@ rm -rf "$REPO/build/marauder-bridge" "$REPO/dist/marauder-bridge"
   --copy-metadata keyring \
   --collect-submodules secretstorage \
   --hidden-import jeepney \
-  --hidden-import serial_asyncio \
+  --hidden-import serial_asyncio_fast \
   --hidden-import assistant \
   --hidden-import assistant_runner \
   --hidden-import capture_store \

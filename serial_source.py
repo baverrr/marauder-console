@@ -4,7 +4,7 @@ The bridge never talks to a serial port directly; it talks to a *source* that ex
 operations — open, write a line, and yield incoming lines — plus close. Two implementations share that
 interface:
 
-* ``RealSerialSource`` wraps ``pyserial-asyncio`` and owns ``/dev/ttyUSB0`` (or whatever port) only while
+* ``RealSerialSource`` wraps ``pyserial-asyncio-fast`` and owns ``/dev/ttyUSB0`` (or whatever port) only while
   it is open, so the user's flashing script can grab the port the moment the console disconnects.
 * ``MockSerialSource`` fakes an ESP32 running Marauder v1.20.0. It answers ``help``/``info`` with canned
   text and, for streaming commands (``scanall``, ``sniff*``, ``wardrive`` …), emits a trickle of
@@ -57,7 +57,7 @@ class SerialSource:
 
 
 class RealSerialSource(SerialSource):
-    """A real ESP32 over USB serial via pyserial-asyncio."""
+    """A real ESP32 over USB serial via pyserial-asyncio-fast (the maintained fork of pyserial-asyncio)."""
 
     def __init__(self, port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> None:
         self.port = port
@@ -73,13 +73,13 @@ class RealSerialSource(SerialSource):
         if self.is_open:
             return
         try:
-            import serial_asyncio  # imported lazily so the mock works without the dependency
+            import serial_asyncio_fast  # imported lazily so the mock works without the dependency
         except ImportError as exc:  # pragma: no cover - environment dependent
             raise SerialError(
-                "pyserial-asyncio isn't installed; run install.sh or pip install pyserial-asyncio"
+                "pyserial-asyncio-fast isn't installed; run install.sh or pip install pyserial-asyncio-fast"
             ) from exc
         try:
-            self._reader, self._writer = await serial_asyncio.open_serial_connection(
+            self._reader, self._writer = await serial_asyncio_fast.open_serial_connection(
                 url=self.port, baudrate=self.baud
             )
         except Exception as exc:  # pyserial raises its own SerialException subtypes
@@ -97,6 +97,9 @@ class RealSerialSource(SerialSource):
     async def write_line(self, line: str) -> None:
         if self._writer is None:
             raise SerialError("Port is closed")
+        if "\r" in line or "\n" in line:
+            # Last line of defence: one call must never turn into several commands on the board.
+            raise SerialError("Command must be a single line")
         self._writer.write((line + "\r\n").encode())
         await self._writer.drain()
 
@@ -201,7 +204,9 @@ class MockSerialSource(SerialSource):
     async def lines(self) -> AsyncIterator[str]:
         while self._open and self._queue is not None:
             try:
-                line = await asyncio.wait_for(self._queue.get(), timeout=0.5)
+                # asyncio.timeout rather than wait_for, which on 3.11 can drop a cancel (and the line it got).
+                async with asyncio.timeout(0.5):
+                    line = await self._queue.get()
             except TimeoutError:
                 continue
             yield line

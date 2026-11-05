@@ -4,23 +4,28 @@ Marauder's ``wardrive`` writes a Wigle CSV: a ``WigleWifi-1.x`` pre-header line,
 (``MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,…``), then one row per
 observation. This turns such a file into a list of located points for the map view.
 
-Rows without a GPS fix (latitude and longitude both 0, or unparseable) are dropped — the board writes those
-when it has no fix. Read-only; the file is one the user already copied into the captures folder.
+Rows without a usable GPS fix (latitude and longitude both 0, unparseable, or out of range) are dropped —
+the board writes 0,0 when it has no fix. Read-only; the file is one the user already copied into the
+captures folder.
 """
 
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 
 _MAX_POINTS = 50_000
 
 
 def _to_float(value: str) -> float | None:
+    """A finite float, or None. ``float()`` accepts "nan" and "inf", which JSON can't carry, so those are
+    treated as unparseable rather than reaching the API response (and failing it with a 500)."""
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return None
+    return number if math.isfinite(number) else None
 
 
 def _cell(row: list[str], cols: dict[str, int], name: str, default: str = "") -> str:
@@ -51,6 +56,8 @@ def parse_wigle(path: str | Path) -> dict:
             lon = _to_float(_cell(row, cols, "CurrentLongitude"))
             if lat is None or lon is None or (lat == 0.0 and lon == 0.0):
                 continue  # no GPS fix for this observation
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                continue  # not a real coordinate (a corrupt row); it would also wreck the map bounds
             points.append(
                 {
                     "mac": _cell(row, cols, "MAC"),

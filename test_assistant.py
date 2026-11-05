@@ -12,7 +12,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from assistant import ProposalStore, command_transmits
+from assistant import ProposalStore, command_transmits, has_control_chars
 from bridge import create_app
 
 
@@ -68,3 +68,45 @@ def test_dismiss_and_clear_endpoints(client: TestClient) -> None:
     client.post("/api/assistant/proposals", json={"command": "scanall"})
     assert client.delete("/api/assistant/proposals").json()["ok"] is True
     assert client.get("/api/assistant/proposals").json()["proposals"] == []
+
+
+@pytest.mark.parametrize(
+    "command", ["list\nattack -t deauth", "info\r\nattack -t beacon", "scanap\rx", "a\x00b"]
+)
+def test_multiline_or_control_char_proposal_rejected(client: TestClient, command: str) -> None:
+    # The transmit flag only looks at the first word, so a hidden second line could pose as harmless.
+    assert has_control_chars(command)
+    with pytest.raises(ValueError):
+        ProposalStore().propose(command)
+    resp = client.post("/api/assistant/proposals", json={"command": command})
+    assert resp.status_code == 400
+    assert client.get("/api/assistant/proposals").json()["proposals"] == []
+
+
+def test_proposal_store_is_thread_safe() -> None:
+    # The chat tool loop stages proposals from a worker thread while the UI dismisses them; none may be
+    # lost and ids must stay unique.
+    import threading
+
+    store = ProposalStore()
+    keep = [store.propose("info")["id"] for _ in range(50)]
+
+    def stage() -> None:
+        for _ in range(200):
+            store.propose("scanap")
+
+    def churn() -> None:
+        for _ in range(200):
+            p = store.propose("list")
+            store.dismiss(p["id"])
+
+    threads = [threading.Thread(target=stage) for _ in range(4)] + [threading.Thread(target=churn)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    items = store.list()
+    assert sum(p["command"] == "scanap" for p in items) == 800
+    assert not any(p["command"] == "list" for p in items)
+    assert set(keep) <= {p["id"] for p in items}
+    assert len({p["id"] for p in items}) == len(items)

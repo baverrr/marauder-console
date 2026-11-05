@@ -29,16 +29,17 @@ import os
 import re
 import threading
 from collections import deque
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from assistant import ProposalStore
+from assistant import ProposalStore, has_control_chars
 from assistant_runner import ChatContext, KeyStore, build_client, run_chat
 from capture_store import CaptureStore, resolve_captures_dir
 from lan_discovery import discover_cameras
@@ -53,6 +54,8 @@ from serial_source import (
 from session_store import SessionRecorder, SessionStore, resolve_data_dir
 
 HOST = "127.0.0.1"
+# Seconds a websocket client gets to accept one message before it's dropped (see SerialManager._broadcast).
+WS_SEND_TIMEOUT = 5.0
 PORT = 8200  # the console's HTTP/WS port; separate from the TV remote's 8198/8199
 FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 # Commands that keep streaming until stopscan; the bridge marks itself "running" while one is active.
@@ -89,12 +92,26 @@ _ALLOWED_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
 _ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver", *_PUBLIC_HOSTS]
 
 
+# Local serial devices only: /dev/ttyUSB0, /dev/ttyACM0, /dev/cu.usbserial-…, /dev/serial/by-id/…, COM3.
+_SERIAL_PORT_RE = re.compile(r"^(/dev/[A-Za-z0-9._:+-][A-Za-z0-9._:+/-]*|COM[0-9]{1,3})$")
+
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 def _origin_allowed(origin: str | None) -> bool:
     """True if a browser Origin is one of ours. A missing Origin (native client / test) is allowed —
     a malicious *web page* always sends an Origin on a WebSocket, so this blocks the drive-by vector."""
     if not origin:
         return True
     return origin in _ALLOWED_ORIGINS or bool(_ALLOWED_ORIGIN_RE.match(origin))
+
+
+class InvalidPortError(SerialError):
+    """A port name the bridge refuses to open (not a local serial device)."""
+
+
+class InvalidCommandError(SerialError):
+    """A command the bridge refuses to send (e.g. it contains a newline that would split it in two)."""
 
 
 class CommandBody(BaseModel):
@@ -138,6 +155,7 @@ class SerialManager:
         self.firmware: str | None = None
         self.running = False  # a streaming command is active
         self._clients: set[WebSocket] = set()
+        self._close_tasks: set[asyncio.Task] = set()  # keeps background closes of dropped clients alive
         self._reader_task: asyncio.Task[None] | None = None
         self._history: deque[str] = deque(maxlen=300)  # replayed to late-joining websockets
         self._hist_lock = threading.Lock()  # guards _history (read from a worker thread by the assistant)
@@ -165,6 +183,10 @@ class SerialManager:
         b = baud or self._default_baud
         if self._mock:
             return MockSerialSource(baud=b)
+        if not _SERIAL_PORT_RE.match(p) or ".." in p:
+            # pyserial also opens URLs (socket://, rfc2217://, loop://), which would let any API caller make
+            # the bridge open outbound network connections. Only real serial device names are accepted.
+            raise InvalidPortError("Not a serial port name (expected e.g. /dev/ttyUSB0 or COM3)")
         return RealSerialSource(port=p, baud=b)
 
     async def connect(self, port: str | None, baud: int | None) -> None:
@@ -209,6 +231,8 @@ class SerialManager:
         command = command.strip()
         if not command:
             return
+        if has_control_chars(command):
+            raise InvalidCommandError("Command must be a single line with no control characters")
         if self.source is None or not self.source.is_open:
             raise SerialError("Not connected to a board")
         await self.source.write_line(command)
@@ -251,12 +275,15 @@ class SerialManager:
     def _schedule_fail(self, message: str) -> None:
         """Broadcast an error line and tear down under the lock, off the pump task (so it is not the task
         cancelling itself, and teardown is serialized with connect/disconnect)."""
-        self._fail_task = asyncio.create_task(self._fail(message))
+        self._fail_task = asyncio.create_task(self._fail(message, self.source))
 
-    async def _fail(self, message: str) -> None:
+    async def _fail(self, message: str, failed: SerialSource | None) -> None:
         await self._broadcast({"type": "line", "data": f"[bridge] {message}"})
         async with self._lock:
-            await self._teardown()
+            # While the line above was broadcasting, the user may have disconnected and reconnected. Only
+            # tear down the connection that actually failed, never a fresh one that replaced it.
+            if failed is not None and self.source is failed:
+                await self._teardown()
         await self.broadcast_status()
 
     def _note_firmware(self, line: str) -> None:
@@ -288,15 +315,38 @@ class SerialManager:
         await self._broadcast({"type": "status", "data": self.status()})
 
     async def _broadcast(self, message: dict) -> None:
+        # Send to every client at once, each with a deadline. The pump awaits this, so one client that has
+        # stopped reading (a sleeping laptop, a stalled proxy hop) must not freeze the serial stream for
+        # everyone: it gets dropped after WS_SEND_TIMEOUT instead.
         payload = json.dumps(message)
-        dead: list[WebSocket] = []
-        for ws in list(self._clients):
-            try:
+        clients = list(self._clients)
+        if not clients:
+            return
+        results = await asyncio.gather(*(self._send(ws, payload) for ws in clients))
+        for ws, ok in zip(clients, results, strict=True):
+            if not ok:
+                self._clients.discard(ws)
+                task = asyncio.create_task(self._close_quietly(ws))
+                self._close_tasks.add(task)
+                task.add_done_callback(self._close_tasks.discard)
+
+    @staticmethod
+    async def _send(ws: WebSocket, payload: str) -> bool:
+        try:
+            # asyncio.timeout, not wait_for: on Python 3.11 wait_for can swallow a cancel that lands as the
+            # send completes, which left a disconnect waiting forever on a pump that never stopped.
+            async with asyncio.timeout(WS_SEND_TIMEOUT):
                 await ws.send_text(payload)
-            except Exception:  # noqa: BLE001 - client went away
-                dead.append(ws)
-        for ws in dead:
-            self._clients.discard(ws)
+        except Exception:  # noqa: BLE001 - client went away or is too slow
+            return False
+        return True
+
+    @staticmethod
+    async def _close_quietly(ws: WebSocket) -> None:
+        # The client's own /ws handler then sees the disconnect and exits.
+        with contextlib.suppress(Exception):
+            async with asyncio.timeout(WS_SEND_TIMEOUT):
+                await ws.close(code=1011)
 
 
 def create_app(
@@ -337,6 +387,18 @@ def create_app(
     # reaches this loopback port through an attacker-controlled domain pointed at 127.0.0.1.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
+    # CORS only stops a foreign page from *reading* a response; a body-less POST is a "simple request" with
+    # no preflight, so without this any web page could connect, stop or disconnect the board, or start a
+    # camera scan. Apply the same Origin rule as /ws to every state-changing request. A missing Origin is a
+    # native client (curl, tests); browsers always send one on cross-origin POST/PUT/PATCH/DELETE.
+    @app.middleware("http")
+    async def reject_foreign_origins(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if request.method not in _SAFE_METHODS and not _origin_allowed(request.headers.get("origin")):
+            return JSONResponse({"ok": False, "error": "origin not allowed"}, status_code=403)
+        return await call_next(request)
+
     @app.get("/api/status")
     async def get_status() -> dict:
         return manager.status()
@@ -346,6 +408,8 @@ def create_app(
         body = body or ConnectBody()
         try:
             await manager.connect(body.port, body.baud)
+        except InvalidPortError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         except SerialError as exc:
             logging.getLogger("marauder.bridge").info("connect failed: %s", exc)
             return JSONResponse(
@@ -363,6 +427,8 @@ def create_app(
     async def command(body: CommandBody) -> JSONResponse:
         try:
             await manager.send_command(body.command)
+        except InvalidCommandError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         except SerialError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
         return JSONResponse({"ok": True, "status": manager.status()})
@@ -394,7 +460,8 @@ def create_app(
 
     @app.get("/api/captures/{name}/summary")
     async def capture_summary(name: str) -> JSONResponse:
-        data = captures.summarize(name)
+        # Parsing a large pcap takes seconds; run it off the event loop so the live stream keeps flowing.
+        data = await asyncio.to_thread(captures.summarize, name)
         if data is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
@@ -402,7 +469,7 @@ def create_app(
     @app.get("/api/captures/{name}/wardrive")
     async def capture_wardrive(name: str) -> JSONResponse:
         # Parse a Wigle CSV into located points for the map. Read-only, offline; no tiles are fetched.
-        data = captures.wardrive(name)
+        data = await asyncio.to_thread(captures.wardrive, name)
         if data is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
@@ -419,7 +486,11 @@ def create_app(
     async def add_proposal(body: ProposeBody) -> JSONResponse:
         if not body.command.strip():
             return JSONResponse({"ok": False, "error": "empty command"}, status_code=400)
-        return JSONResponse({"ok": True, "proposal": proposals.propose(body.command, body.rationale)})
+        try:
+            proposal = proposals.propose(body.command, body.rationale)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        return JSONResponse({"ok": True, "proposal": proposal})
 
     @app.delete("/api/assistant/proposals/{proposal_id}")
     async def dismiss_proposal(proposal_id: int) -> dict:
@@ -433,24 +504,26 @@ def create_app(
     # ---- Assistant API key (OS keychain; the value is set by the user and never returned) -------
     @app.get("/api/assistant/key")
     async def key_status() -> dict:
-        return {"has_key": keystore.has()}
+        # Keychain lookups are synchronous D-Bus calls that can block on an unlock prompt: keep them off
+        # the event loop that pumps the serial port and the websockets.
+        return {"has_key": await asyncio.to_thread(keystore.has)}
 
     @app.post("/api/assistant/key")
     async def set_key(body: KeyBody) -> JSONResponse:
         if not body.key.strip():
             return JSONResponse({"ok": False, "error": "empty key"}, status_code=400)
-        keystore.set(body.key)
-        return JSONResponse({"ok": True, "has_key": keystore.has()})
+        await asyncio.to_thread(keystore.set, body.key)
+        return JSONResponse({"ok": True, "has_key": await asyncio.to_thread(keystore.has)})
 
     @app.delete("/api/assistant/key")
     async def clear_key() -> dict:
-        keystore.clear()
-        return {"ok": True, "has_key": keystore.has()}
+        await asyncio.to_thread(keystore.clear)
+        return {"ok": True, "has_key": await asyncio.to_thread(keystore.has)}
 
     # ---- Assistant chat (advise/draft tool loop) ------------------------------------------------
     @app.post("/api/assistant/chat")
     async def assistant_chat(body: ChatBody) -> JSONResponse:
-        api_key = keystore.get()
+        api_key = await asyncio.to_thread(keystore.get)
         if not api_key:
             return JSONResponse(
                 {"ok": False, "error": "No Anthropic API key set. Add one in the assistant settings."},
