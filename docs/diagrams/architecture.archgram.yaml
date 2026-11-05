@@ -1,0 +1,68 @@
+archgram: 1
+title: Marauder Console
+description: >-
+  The React UI, in a browser tab or the Tauri desktop window, talks only to
+  the local Python bridge. The bridge is the single owner of the USB serial
+  port: it writes each command to the ESP32 and streams the board's output
+  back over a WebSocket while recording the session to disk. The Claude
+  assistant runs inside the bridge, reads saved sessions and captures, and
+  can only propose commands for you to run; it never reaches the board, and
+  it is the only call that leaves your computer.
+direction: down
+frames:
+  - { id: machine, label: Your computer (loopback only) }
+  - { id: bridgeproc, label: Python bridge, parent: machine }
+nodes:
+  - id: ui
+    kind: browser
+    label: React UI
+    note: browser tab or Tauri window
+    tech: react
+    frame: machine
+    source: ../../frontend/src/App.tsx
+  - id: bridge
+    kind: service
+    label: bridge.py
+    note: sole owner of the serial port
+    tech: fastapi
+    frame: bridgeproc
+    source: ../../bridge.py
+  - id: assistant
+    kind: agent
+    label: Assistant
+    note: proposes commands, never runs them
+    frame: bridgeproc
+    source: [../../assistant_runner.py, ../../assistant.py]
+  - id: data
+    kind: storage
+    label: Saved data
+    note: session history + captures
+    frame: machine
+    source: [../../session_store.py, ../../capture_store.py]
+  - id: esp32
+    kind: service
+    label: ESP32 Marauder
+    note: USB serial
+    tech: espressif
+    variant: external
+    source: ../../serial_source.py
+  - id: claude
+    kind: model
+    label: Claude API
+    note: optional, key in OS keychain
+    tech: anthropic
+    variant: external
+    source: '../../assistant_runner.py#anthropic.Anthropic(api_key=api_key)'
+edges:
+  - { from: ui, to: bridge, label: HTTP, source: '../../frontend/src/lib/bridge.ts#fetch(`${BASE}${path}`' }
+  - { from: bridge, to: ui, label: WebSocket, source: '../../bridge.py#await self._broadcast({"type": "line", "data": line})' }
+  - { from: bridge, to: esp32, label: command, source: '../../bridge.py#await self.source.write_line(command)' }
+  - { from: esp32, to: bridge, label: output, source: '../../bridge.py#async for line in self.source.lines():' }
+  - { from: bridge, to: data, label: record, source: '../../bridge.py#self._recorder.log("line", line)' }
+  - { from: bridge, to: assistant, label: chat, source: '../../bridge.py#run_chat, client, body.messages, ctx' }
+  - { from: assistant, to: data, label: read, source: '../../assistant_runner.py#ctx.captures.summarize(' }
+  - { from: assistant, to: claude, label: ask, style: dashed, source: '../../assistant_runner.py#client.messages.create(' }
+flows:
+  - { name: run a command, steps: [ui, bridge, esp32] }
+  - { name: live output, steps: [esp32, bridge, [ui, data]] }
+  - { name: ask the assistant, steps: [ui, bridge, assistant, [data, claude]] }
