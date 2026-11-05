@@ -139,8 +139,13 @@ def _dispatch(name: str, tool_input: dict, ctx: ChatContext) -> Any:
     if name == "get_status":
         return ctx.manager.status()
     if name == "tail_console":
-        n = int(tool_input.get("n", 50) or 50)
-        return {"lines": ctx.manager.recent_lines(n)}
+        # The model sometimes sends "n" as text or junk; fall back to the default rather than failing the
+        # whole chat with a ValueError. History holds at most 300 lines, so clamp to that.
+        try:
+            n = int(tool_input.get("n", 50) or 50)
+        except (TypeError, ValueError):
+            n = 50
+        return {"lines": ctx.manager.recent_lines(max(1, min(n, 300)))}
     if name == "list_tools":
         return {"tools": ctx.tools_catalogue}
     if name == "list_captures":

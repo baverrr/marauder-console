@@ -137,3 +137,10 @@ def test_key_status_never_returns_the_value(client: TestClient) -> None:
 
 def test_empty_key_rejected(client: TestClient) -> None:
     assert client.post("/api/assistant/key", json={"key": "  "}).status_code == 400
+
+
+@pytest.mark.parametrize("n", ["ten", None, [], "5", 10_000, -3])
+def test_tail_console_tolerates_bad_n(n) -> None:
+    # A malformed "n" from the model must not raise and fail the whole chat.
+    out = _dispatch("tail_console", {"n": n}, _ctx())
+    assert isinstance(out["lines"], list)

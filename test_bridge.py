@@ -443,3 +443,65 @@ async def test_stalled_websocket_client_is_dropped_without_blocking_others(monke
     assert slow not in mgr._clients and fast in mgr._clients
     await asyncio.sleep(0)  # let the background close run
     assert slow.closed is True
+
+
+async def test_stale_failure_does_not_close_a_new_connection() -> None:
+    # Unplug → quick Disconnect + Connect while the old failure is still broadcasting: the old teardown
+    # must leave the new connection alone.
+    mgr = SerialManager(mock=True, port="mock://x", baud=115200)
+    await mgr.connect(None, None)
+    old = mgr.source
+    await mgr.disconnect()
+    await mgr.connect(None, None)
+    await mgr._fail("the board closed the connection", old)
+    assert mgr.connected is True
+    await mgr._fail("lost the serial stream", mgr.source)
+    assert mgr.connected is False
+
+
+@pytest.mark.parametrize(
+    "port", ["socket://192.0.2.1:7000", "rfc2217://192.0.2.1:7000", "loop://", "/dev/../tmp/x", "tty", "COM"]
+)
+def test_real_source_rejects_non_serial_port_names(port: str) -> None:
+    from bridge import InvalidPortError
+
+    mgr = SerialManager(mock=False, port="/dev/ttyUSB0", baud=115200)
+    with pytest.raises(InvalidPortError):
+        mgr._make_source(port, None)
+
+
+@pytest.mark.parametrize(
+    "port", ["/dev/ttyUSB0", "/dev/ttyACM1", "/dev/serial/by-id/usb-Silicon_Labs-if00", "COM3"]
+)
+def test_real_source_accepts_serial_port_names(port: str) -> None:
+    from serial_source import RealSerialSource
+
+    mgr = SerialManager(mock=False, port="/dev/ttyUSB0", baud=115200)
+    assert isinstance(mgr._make_source(port, None), RealSerialSource)
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "openpty"), reason="needs a POSIX pseudo-terminal")
+async def test_real_source_round_trip_over_a_pty() -> None:
+    # Exercises pyserial-asyncio-fast end to end against a pseudo-terminal standing in for the board.
+    import os
+    import tty
+
+    from serial_source import RealSerialSource
+
+    board, port_fd = os.openpty()
+    tty.setraw(board)
+    src = RealSerialSource(port=os.ttyname(port_fd), baud=115200)
+    try:
+        await src.open()
+        await src.write_line("info")
+        got = b""
+        while not got.endswith(b"\r\n"):
+            got += await asyncio.to_thread(os.read, board, 64)
+        assert got == b"info\r\n"
+        os.write(board, b"Firmware version: test\r\n")
+        line = await asyncio.wait_for(anext(src.lines()), timeout=2)
+        assert "Firmware version: test" in line
+    finally:
+        await src.close()
+        os.close(board)
+        os.close(port_fd)

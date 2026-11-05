@@ -92,6 +92,9 @@ _ALLOWED_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
 _ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver", *_PUBLIC_HOSTS]
 
 
+# Local serial devices only: /dev/ttyUSB0, /dev/ttyACM0, /dev/cu.usbserial-…, /dev/serial/by-id/…, COM3.
+_SERIAL_PORT_RE = re.compile(r"^(/dev/[A-Za-z0-9._:+-][A-Za-z0-9._:+/-]*|COM[0-9]{1,3})$")
+
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
@@ -101,6 +104,10 @@ def _origin_allowed(origin: str | None) -> bool:
     if not origin:
         return True
     return origin in _ALLOWED_ORIGINS or bool(_ALLOWED_ORIGIN_RE.match(origin))
+
+
+class InvalidPortError(SerialError):
+    """A port name the bridge refuses to open (not a local serial device)."""
 
 
 class InvalidCommandError(SerialError):
@@ -176,6 +183,10 @@ class SerialManager:
         b = baud or self._default_baud
         if self._mock:
             return MockSerialSource(baud=b)
+        if not _SERIAL_PORT_RE.match(p) or ".." in p:
+            # pyserial also opens URLs (socket://, rfc2217://, loop://), which would let any API caller make
+            # the bridge open outbound network connections. Only real serial device names are accepted.
+            raise InvalidPortError("Not a serial port name (expected e.g. /dev/ttyUSB0 or COM3)")
         return RealSerialSource(port=p, baud=b)
 
     async def connect(self, port: str | None, baud: int | None) -> None:
@@ -264,12 +275,15 @@ class SerialManager:
     def _schedule_fail(self, message: str) -> None:
         """Broadcast an error line and tear down under the lock, off the pump task (so it is not the task
         cancelling itself, and teardown is serialized with connect/disconnect)."""
-        self._fail_task = asyncio.create_task(self._fail(message))
+        self._fail_task = asyncio.create_task(self._fail(message, self.source))
 
-    async def _fail(self, message: str) -> None:
+    async def _fail(self, message: str, failed: SerialSource | None) -> None:
         await self._broadcast({"type": "line", "data": f"[bridge] {message}"})
         async with self._lock:
-            await self._teardown()
+            # While the line above was broadcasting, the user may have disconnected and reconnected. Only
+            # tear down the connection that actually failed, never a fresh one that replaced it.
+            if failed is not None and self.source is failed:
+                await self._teardown()
         await self.broadcast_status()
 
     def _note_firmware(self, line: str) -> None:
@@ -390,6 +404,8 @@ def create_app(
         body = body or ConnectBody()
         try:
             await manager.connect(body.port, body.baud)
+        except InvalidPortError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         except SerialError as exc:
             logging.getLogger("marauder.bridge").info("connect failed: %s", exc)
             return JSONResponse(
