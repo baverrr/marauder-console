@@ -39,12 +39,13 @@ layers are deliberately split:
   and output. Connect the board, and the same tool cards gain a **Run** control.
 
 <p align="center">
-  <img src="docs/architecture.svg" alt="Architecture: one React UI (browser tab or Tauri desktop window) talks to the loopback Python bridge over HTTP and WebSocket; the bridge owns the USB serial link to the ESP32, keeps session history and read-only capture analysis, and runs the assistant tool loop. The Claude assistant is the only outbound call (advise and draft only, key in the OS keychain); bundled firmware flashes the board via esptool. Reference and saved data work with no board." width="860">
+  <img src="docs/diagrams/architecture.svg" alt="Architecture: the React UI (browser tab or Tauri window) sends commands to the local Python bridge over HTTP and gets live output back over a WebSocket. The bridge is the sole owner of the USB serial port to the ESP32 Marauder and records each session to disk. The assistant runs inside the bridge, reads saved sessions and captures, and asks the Claude API, the only call that leaves your computer; it can propose commands but never runs them." width="860">
 </p>
 
-```
-Browser SPA ──HTTP (commands) + WebSocket (live serial)──▶ Python bridge ──pyserial──▶ ESP32 Marauder
-```
+The reference and your saved data work with no board attached. Firmware is flashed separately, with
+[`scripts/flash-firmware.sh`](scripts/flash-firmware.sh) (esptool), not through the bridge.
+The diagram is drawn with [archgram](https://github.com/byabas/archgram) from
+[`docs/diagrams/architecture.archgram.yaml`](docs/diagrams/architecture.archgram.yaml).
 
 ## Features
 
@@ -279,7 +280,7 @@ marauder-console/
 │       ├── lib/              # bridge client (HTTP+WS), command builder
 │       └── components/       # TopBar, CategoryNav, ToolCard, SerialConsole, HardwarePanel, ui/
 └── docs/
-    ├── architecture.svg
+    ├── diagrams/             # architecture diagram: archgram spec + generated SVG
     └── images/               # UI screenshots
 ```
 
