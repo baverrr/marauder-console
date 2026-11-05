@@ -6,8 +6,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# The build runs with a read-only token. Only the small `publish` job below, which runs no project code and
+# installs nothing, gets `contents: write` to attach the files to the release.
 permissions:
-  contents: write # needed to attach artifacts to the release
+  contents: read
 
 jobs:
   bundle:
@@ -36,11 +38,12 @@ jobs:
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
+      # Locked and hash-checked: a package swapped on PyPI at release time fails the install instead of
+      # ending up in the shipped sidecar. Regenerate the lock with the command in requirements-release.in.
       - name: Python bridge deps + PyInstaller
         run: |
           python -m venv venv
-          ./venv/bin/pip install --upgrade pip
-          ./venv/bin/pip install -r requirements.txt pyinstaller
+          ./venv/bin/pip install --require-hashes --no-deps -r packaging/requirements-release.txt
 
       - name: Frontend deps
         run: npm ci
@@ -73,19 +76,32 @@ jobs:
           cp marauder-firmware-cyd.zip dist-artifacts/
           ls -lh dist-artifacts/
 
-      - name: Attach to the GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        # Use the preinstalled gh CLI (no third-party release action). Create the release if it doesn't
-        # exist yet, otherwise just attach/replace the files.
-        run: |
-          gh release create "$TAG" dist-artifacts/* --title "$TAG" --notes "Automated desktop bundle." \
-            || gh release upload "$TAG" dist-artifacts/* --clobber
-
       - name: Upload as a workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: marauder-console-linux
           path: dist-artifacts/*
+
+  publish:
+    name: Attach to the GitHub release
+    needs: bundle
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach the artifacts to the release; nothing else in this job needs it
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: marauder-console-linux
+          path: dist-artifacts
+
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        # Use the preinstalled gh CLI (no third-party release action). Create the release if it doesn't
+        # exist yet, otherwise just attach/replace the files. GH_REPO is set because there's no checkout.
+        run: |
+          gh release create "$TAG" dist-artifacts/* --title "$TAG" --notes "Automated desktop bundle." \
+            || gh release upload "$TAG" dist-artifacts/* --clobber

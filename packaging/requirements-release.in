@@ -1,0 +1,6 @@
+# Inputs for the release build's locked, hash-checked Python install (release.yml). Regenerate the lock
+# after changing requirements.txt or this file:
+#   uv pip compile packaging/requirements-release.in --generate-hashes --python-version 3.12 \
+#     --python-platform x86_64-manylinux_2_28 -o packaging/requirements-release.txt
+-r ../requirements.txt
+pyinstaller

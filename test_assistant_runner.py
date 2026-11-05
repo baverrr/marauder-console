@@ -75,6 +75,14 @@ def test_propose_command_tool_only_stages() -> None:
     assert ctx.manager.status()["running"] is False
 
 
+def test_propose_command_tool_rejects_multiline_command() -> None:
+    # A command smuggling a second line (e.g. via a crafted SSID the model read) must not be staged.
+    ctx = _ctx()
+    out = _dispatch("propose_command", {"command": "list\nattack -t deauth"}, ctx)
+    assert "error" in out
+    assert ctx.proposals.list() == []
+
+
 def test_run_chat_executes_readonly_tool_then_replies() -> None:
     ctx = _ctx()
     scripted = [

@@ -29,16 +29,17 @@ import os
 import re
 import threading
 from collections import deque
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from assistant import ProposalStore
+from assistant import ProposalStore, has_control_chars
 from assistant_runner import ChatContext, KeyStore, build_client, run_chat
 from capture_store import CaptureStore, resolve_captures_dir
 from lan_discovery import discover_cameras
@@ -89,12 +90,19 @@ _ALLOWED_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
 _ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver", *_PUBLIC_HOSTS]
 
 
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 def _origin_allowed(origin: str | None) -> bool:
     """True if a browser Origin is one of ours. A missing Origin (native client / test) is allowed —
     a malicious *web page* always sends an Origin on a WebSocket, so this blocks the drive-by vector."""
     if not origin:
         return True
     return origin in _ALLOWED_ORIGINS or bool(_ALLOWED_ORIGIN_RE.match(origin))
+
+
+class InvalidCommandError(SerialError):
+    """A command the bridge refuses to send (e.g. it contains a newline that would split it in two)."""
 
 
 class CommandBody(BaseModel):
@@ -209,6 +217,8 @@ class SerialManager:
         command = command.strip()
         if not command:
             return
+        if has_control_chars(command):
+            raise InvalidCommandError("Command must be a single line with no control characters")
         if self.source is None or not self.source.is_open:
             raise SerialError("Not connected to a board")
         await self.source.write_line(command)
@@ -337,6 +347,18 @@ def create_app(
     # reaches this loopback port through an attacker-controlled domain pointed at 127.0.0.1.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
 
+    # CORS only stops a foreign page from *reading* a response; a body-less POST is a "simple request" with
+    # no preflight, so without this any web page could connect, stop or disconnect the board, or start a
+    # camera scan. Apply the same Origin rule as /ws to every state-changing request. A missing Origin is a
+    # native client (curl, tests); browsers always send one on cross-origin POST/PUT/PATCH/DELETE.
+    @app.middleware("http")
+    async def reject_foreign_origins(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if request.method not in _SAFE_METHODS and not _origin_allowed(request.headers.get("origin")):
+            return JSONResponse({"ok": False, "error": "origin not allowed"}, status_code=403)
+        return await call_next(request)
+
     @app.get("/api/status")
     async def get_status() -> dict:
         return manager.status()
@@ -363,6 +385,8 @@ def create_app(
     async def command(body: CommandBody) -> JSONResponse:
         try:
             await manager.send_command(body.command)
+        except InvalidCommandError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         except SerialError as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
         return JSONResponse({"ok": True, "status": manager.status()})
@@ -394,7 +418,8 @@ def create_app(
 
     @app.get("/api/captures/{name}/summary")
     async def capture_summary(name: str) -> JSONResponse:
-        data = captures.summarize(name)
+        # Parsing a large pcap takes seconds; run it off the event loop so the live stream keeps flowing.
+        data = await asyncio.to_thread(captures.summarize, name)
         if data is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
@@ -402,7 +427,7 @@ def create_app(
     @app.get("/api/captures/{name}/wardrive")
     async def capture_wardrive(name: str) -> JSONResponse:
         # Parse a Wigle CSV into located points for the map. Read-only, offline; no tiles are fetched.
-        data = captures.wardrive(name)
+        data = await asyncio.to_thread(captures.wardrive, name)
         if data is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return JSONResponse(data)
@@ -419,7 +444,11 @@ def create_app(
     async def add_proposal(body: ProposeBody) -> JSONResponse:
         if not body.command.strip():
             return JSONResponse({"ok": False, "error": "empty command"}, status_code=400)
-        return JSONResponse({"ok": True, "proposal": proposals.propose(body.command, body.rationale)})
+        try:
+            proposal = proposals.propose(body.command, body.rationale)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        return JSONResponse({"ok": True, "proposal": proposal})
 
     @app.delete("/api/assistant/proposals/{proposal_id}")
     async def dismiss_proposal(proposal_id: int) -> dict:
@@ -433,24 +462,26 @@ def create_app(
     # ---- Assistant API key (OS keychain; the value is set by the user and never returned) -------
     @app.get("/api/assistant/key")
     async def key_status() -> dict:
-        return {"has_key": keystore.has()}
+        # Keychain lookups are synchronous D-Bus calls that can block on an unlock prompt: keep them off
+        # the event loop that pumps the serial port and the websockets.
+        return {"has_key": await asyncio.to_thread(keystore.has)}
 
     @app.post("/api/assistant/key")
     async def set_key(body: KeyBody) -> JSONResponse:
         if not body.key.strip():
             return JSONResponse({"ok": False, "error": "empty key"}, status_code=400)
-        keystore.set(body.key)
-        return JSONResponse({"ok": True, "has_key": keystore.has()})
+        await asyncio.to_thread(keystore.set, body.key)
+        return JSONResponse({"ok": True, "has_key": await asyncio.to_thread(keystore.has)})
 
     @app.delete("/api/assistant/key")
     async def clear_key() -> dict:
-        keystore.clear()
-        return {"ok": True, "has_key": keystore.has()}
+        await asyncio.to_thread(keystore.clear)
+        return {"ok": True, "has_key": await asyncio.to_thread(keystore.has)}
 
     # ---- Assistant chat (advise/draft tool loop) ------------------------------------------------
     @app.post("/api/assistant/chat")
     async def assistant_chat(body: ChatBody) -> JSONResponse:
-        api_key = keystore.get()
+        api_key = await asyncio.to_thread(keystore.get)
         if not api_key:
             return JSONResponse(
                 {"ok": False, "error": "No Anthropic API key set. Add one in the assistant settings."},

@@ -84,6 +84,45 @@ def test_command_requires_connection(client: TestClient) -> None:
     assert resp.status_code == 409  # not connected
 
 
+def test_command_with_newline_is_rejected(client: TestClient) -> None:
+    # "\n" inside a command would reach the board as a second command line.
+    client.post("/api/connect")
+    resp = client.post("/api/command", json={"command": "info\nattack -t deauth"})
+    assert resp.status_code == 400
+    assert client.get("/api/status").json()["running"] is False
+
+
+@pytest.mark.parametrize("path", ["/api/connect", "/api/disconnect", "/api/stop", "/api/cameras/scan"])
+def test_state_changing_post_rejects_a_foreign_origin(client: TestClient, path: str) -> None:
+    # A body-less POST needs no CORS preflight, so the bridge must check Origin itself (drive-by CSRF).
+    resp = client.post(path, headers={"Origin": "https://evil.example"})
+    assert resp.status_code == 403
+    assert client.get("/api/status").json()["connected"] is False
+
+
+def test_foreign_origin_cannot_send_a_command(client: TestClient) -> None:
+    client.post("/api/connect")
+    resp = client.post("/api/command", json={"command": "scanall"}, headers={"Origin": "null"})
+    assert resp.status_code == 403
+    assert client.get("/api/status").json()["running"] is False
+
+
+def test_allowed_or_missing_origin_can_post(client: TestClient) -> None:
+    assert client.post("/api/connect", headers={"Origin": "tauri://localhost"}).status_code == 200
+    assert client.post("/api/disconnect", headers={"Origin": "http://127.0.0.1:8200"}).status_code == 200
+    assert client.post("/api/connect").status_code == 200  # no Origin: a native client such as curl
+    # Reads stay open to any origin (CORS still keeps a foreign page from seeing the response).
+    assert client.get("/api/status", headers={"Origin": "https://evil.example"}).status_code == 200
+
+
+def test_cors_preflight_still_works(client: TestClient) -> None:
+    resp = client.options(
+        "/api/command",
+        headers={"Origin": "tauri://localhost", "Access-Control-Request-Method": "POST"},
+    )
+    assert resp.status_code == 200
+
+
 def test_streaming_sets_and_clears_running(client: TestClient) -> None:
     client.post("/api/connect")
     client.post("/api/command", json={"command": "scanall"})
