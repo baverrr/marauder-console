@@ -323,8 +323,9 @@ license) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 > binaries stay byte-for-byte upstream and are untouched.
 >
 > Two more opt-in patches build the same way: a tap-to-wake idle **screensaver**
-> ([`firmware/custom-screensaver/`](firmware/custom-screensaver)) and a **solid green board LED**, with an
-> option to alternate purple and green once a second ([`firmware/custom-led/`](firmware/custom-led)).
+> ([`firmware/custom-screensaver/`](firmware/custom-screensaver)) and a **solid green board LED** that
+> still shows blue/red during scans, with an option to alternate purple and green once a second
+> ([`firmware/custom-led/`](firmware/custom-led)). CI checks that all three patches apply to upstream v1.20.0.
 
 ## License & legal
 

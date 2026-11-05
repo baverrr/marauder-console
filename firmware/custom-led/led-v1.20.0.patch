@@ -1,18 +1,47 @@
 diff --git a/esp32_marauder/flipperLED.cpp b/esp32_marauder/flipperLED.cpp
-index ef66164..a7aa395 100644
+index ef66164..60e281e 100644
 --- a/esp32_marauder/flipperLED.cpp
 +++ b/esp32_marauder/flipperLED.cpp
-@@ -2,64 +2,86 @@
+@@ -2,64 +2,113 @@
  
  #ifdef HAS_FLIPPER_LED
  
-+// Marauder Console patch: drive the CYD's RGB LED with analogWrite (8-bit PWM) so it can mix colours such
-+// as purple. The LED is common-anode (active-low), so 255 is full brightness and 0 is off. Every write goes
-+// through here, because on core 2.x a pin attached to PWM ignores digitalWrite.
++// Marauder Console patch: drive the RGB LED with analogWrite (8-bit PWM) so it can mix colours such as
++// purple, and show a custom idle colour while no scan is running. This applies to every board that builds
++// this driver (HAS_FLIPPER_LED): the CYD variants and the Flipper / Multiboard S3 dev boards. All of them
++// wire the LED active-low, as stock assumes. Tested on MARAUDER_CYD_MICRO only.
++
++// Tuning. Purple needs a working red channel; on a board whose red is dead it just shows blue, so the
++// default is solid green. Set LED_ALTERNATE to true for purple/green.
++static const bool LED_ALTERNATE = false;
++static const uint32_t LED_ALTERNATE_MS = 1000;
++// The blue die on the CYD's LED is much brighter than the red, so purple needs full red and dimmed blue;
++// with blue at full it just reads as blue. Raise PURPLE_B for a bluer purple, lower it for pinker.
++static const uint8_t PURPLE_R = 255;
++static const uint8_t PURPLE_B = 64;
++
++// What the LED is showing. sniffLED/attackLED/offLED set it; main() paints the idle colour only in
++// MARAUDER_LED_IDLE, so the stock blue (sniff) and red (attack) colours last for the whole scan.
++enum MarauderLedMode : uint8_t { MARAUDER_LED_IDLE, MARAUDER_LED_SNIFF, MARAUDER_LED_ATTACK };
++static MarauderLedMode marauder_led_mode = MARAUDER_LED_IDLE;
++static uint32_t marauder_led_tick = UINT32_MAX;  // last tick main() handled; UINT32_MAX forces a repaint
++
++// Last level written to each channel (-1 = never). On core 2.x every analogWrite() call re-runs
++// ledcSetup() and ledcAttachPin(), so channels that already show the right level are skipped.
++static int16_t marauder_led_level[3] = {-1, -1, -1};
++
++static void marauderWriteChannel(uint8_t idx, uint8_t pin, uint8_t level) {
++  if (marauder_led_level[idx] == level)
++    return;
++  marauder_led_level[idx] = level;
++  analogWrite(pin, 255 - level);  // active-low: 255 - level, so level 255 is full brightness
++}
++
++// Every LED write goes through here, because on core 2.x a pin attached to PWM ignores digitalWrite.
 +static void marauderSetRGB(uint8_t r, uint8_t g, uint8_t b) {
-+  analogWrite(R_PIN, 255 - r);
-+  analogWrite(G_PIN, 255 - g);
-+  analogWrite(B_PIN, 255 - b);
++  marauderWriteChannel(0, R_PIN, r);
++  marauderWriteChannel(1, G_PIN, g);
++  marauderWriteChannel(2, B_PIN, b);
 +}
 +
  void flipperLED::RunSetup() {
@@ -46,6 +75,7 @@ index ef66164..a7aa395 100644
  }
  
  void flipperLED::attackLED() {
++  marauder_led_mode = MARAUDER_LED_ATTACK;
    if (!settings_obj.loadSetting<bool>("EnableLED"))
      return;
      
@@ -59,6 +89,7 @@ index ef66164..a7aa395 100644
  }
  
  void flipperLED::sniffLED() {
++  marauder_led_mode = MARAUDER_LED_SNIFF;
    if (!settings_obj.loadSetting<bool>("EnableLED"))
      return;
      
@@ -72,6 +103,8 @@ index ef66164..a7aa395 100644
  }
  
  void flipperLED::offLED() {
++  marauder_led_mode = MARAUDER_LED_IDLE;
++  marauder_led_tick = UINT32_MAX;  // show the idle colour on the next loop, not at the next tick
    if (!settings_obj.loadSetting<bool>("EnableLED"))
      return;
      
@@ -81,28 +114,22 @@ index ef66164..a7aa395 100644
 +  marauderSetRGB(0, 0, 0);
  }
  
-+// Marauder Console patch: hold the LED solid green, or (LED_ALTERNATE) alternate it between purple and
-+// green. Re-written once per LED_ALTERNATE_MS tick rather than every loop, so the stock scan colours
-+// (red/blue) show only until the next tick. Respects the EnableLED setting, checked once per tick, so
-+// turning it off in Settings takes effect within a second.
++// Marauder Console patch: once per LED_ALTERNATE_MS tick, set the LED from the EnableLED setting and the
++// current mode: off when the LED is disabled, blue/red during a scan, and otherwise solid green or (with
++// LED_ALTERNATE) purple and green in turn. Turning EnableLED off or on takes effect within a tick.
  void flipperLED::main() {
 -  // do nothing
-+  // Purple needs a working red channel; on a board whose red is dead it just shows blue, so this
-+  // defaults to solid green. Set true for purple/green.
-+  static const bool LED_ALTERNATE = false;
-+  static const uint32_t LED_ALTERNATE_MS = 1000;
-+  // The blue die on the CYD's LED is much brighter than the red, so purple needs full red and dimmed
-+  // blue; with blue at full it just reads as blue. Raise PURPLE_B for a bluer purple, lower it for pinker.
-+  static const uint8_t PURPLE_R = 255;
-+  static const uint8_t PURPLE_B = 64;
-+  static uint32_t shown_tick = UINT32_MAX;
-+
 +  uint32_t tick = millis() / LED_ALTERNATE_MS;
-+  if (tick == shown_tick)
++  if (tick == marauder_led_tick)
 +    return;
-+  shown_tick = tick;
++  marauder_led_tick = tick;
++
 +  if (!settings_obj.loadSetting<bool>("EnableLED"))
 +    marauderSetRGB(0, 0, 0);
++  else if (marauder_led_mode == MARAUDER_LED_SNIFF)
++    marauderSetRGB(0, 0, 255);              // stock sniff colour
++  else if (marauder_led_mode == MARAUDER_LED_ATTACK)
++    marauderSetRGB(255, 0, 0);              // stock attack colour
 +  else if (LED_ALTERNATE && (tick % 2 == 0))
 +    marauderSetRGB(PURPLE_R, 0, PURPLE_B);  // purple
 +  else

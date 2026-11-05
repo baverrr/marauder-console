@@ -51,3 +51,36 @@ jobs:
         working-directory: frontend
       - run: npm run build  # tsc -b (typecheck) + vite build
         working-directory: frontend
+
+  firmware-patches:
+    name: Firmware patches apply
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_TAG: v1.20.0
+      # Full commit hash (as in firmware/manifest.json): a short prefix could be matched by a moved tag.
+      UPSTREAM_COMMIT: 511bb3694d0c4dc064888e762bde44fcc9b7f48a
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      # Each opt-in patch in firmware/custom-*/ must apply to upstream v1.20.0 on its own and with all the
+      # others, as the READMEs promise.
+      - name: Fetch upstream ESP32 Marauder
+        run: |
+          git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$UPSTREAM_TAG" \
+            https://github.com/justcallmekoko/ESP32Marauder "$RUNNER_TEMP/upstream"
+          actual=$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)
+          if [ "$actual" != "$UPSTREAM_COMMIT" ]; then
+            echo "::error::$UPSTREAM_TAG is $actual, expected $UPSTREAM_COMMIT"
+            exit 1
+          fi
+      - name: Check each patch, then all of them together
+        run: |
+          shopt -s nullglob
+          patches=("$GITHUB_WORKSPACE"/firmware/custom-*/*.patch)
+          [ ${#patches[@]} -gt 0 ] || { echo "::error::no patches found"; exit 1; }
+          cd "$RUNNER_TEMP/upstream"
+          for p in "${patches[@]}"; do
+            git apply --check "$p"
+            echo "ok: ${p#"$GITHUB_WORKSPACE"/}"
+          done
+          git apply "${patches[@]}"
+          echo "ok: all ${#patches[@]} patches together"
