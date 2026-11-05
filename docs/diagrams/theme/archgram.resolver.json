@@ -1,0 +1,23 @@
+{
+  "version": "2025.10",
+  "modifiers": {
+    "theme": {
+      "contexts": {
+        "light": [{ "color": { "$type": "color",
+          "canvas": { "$value": "#0e1016" }, "card": { "$value": "#14171f" },
+          "badge": { "$value": "#20242c" }, "border": { "$value": "#2b303b" },
+          "line": { "$value": "#8b97a7" }, "text": { "$value": "#e7ebef" },
+          "muted": { "$value": "#8b97a7" }, "primary": { "$value": "#20c573" },
+          "accent": { "$value": "#17b0cf" }, "danger": { "$value": "#dc2828" } } }],
+        "dark": [{ "color": { "$type": "color",
+          "canvas": { "$value": "#0e1016" }, "card": { "$value": "#14171f" },
+          "badge": { "$value": "#20242c" }, "border": { "$value": "#2b303b" },
+          "line": { "$value": "#8b97a7" }, "text": { "$value": "#e7ebef" },
+          "muted": { "$value": "#8b97a7" }, "primary": { "$value": "#20c573" },
+          "accent": { "$value": "#17b0cf" }, "danger": { "$value": "#dc2828" } } }]
+      },
+      "default": "dark"
+    }
+  },
+  "resolutionOrder": [{ "$ref": "#/modifiers/theme" }]
+}

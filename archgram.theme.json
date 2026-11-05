@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "resolver": "docs/diagrams/theme/archgram.resolver.json",
+  "roles": {
+    "canvas": "color.canvas", "card": "color.card", "badge": "color.badge",
+    "card-edge": "color.border", "connector": "color.line", "frame": "color.line",
+    "text": "color.text", "text-muted": "color.muted", "signal-core": "color.card",
+    "icon-core": "color.primary", "icon-ai": "color.accent",
+    "icon-build": "color.primary", "icon-client": "color.accent",
+    "signal-pass": "color.primary", "signal-refusal": "color.danger"
+  },
+  "themes": {
+    "light": { "inputs": { "theme": "light" } },
+    "dark": { "inputs": { "theme": "dark" } }
+  }
+}
