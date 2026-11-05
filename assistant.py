@@ -13,6 +13,7 @@ separate, so nothing the assistant does can transmit or run a command on its own
 from __future__ import annotations
 
 import itertools
+import re
 from datetime import UTC, datetime
 
 # Command verbs that put energy on the air or send packets. Proposals using them are flagged so the human
@@ -28,6 +29,16 @@ _TRANSMIT_PREFIXES = (
     "portscan",
     "join",
 )
+
+
+# C0 control characters and DEL. A "\n" or "\r" inside a command would reach the board as a second command
+# line, slipping past the first-word transmit check below, so commands must be a single plain line.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def has_control_chars(command: str) -> bool:
+    """True if ``command`` contains a newline, carriage return or any other control character."""
+    return bool(_CONTROL_CHARS.search(command))
 
 
 def command_transmits(command: str) -> bool:
@@ -48,6 +59,8 @@ class ProposalStore:
     def propose(self, command: str, rationale: str = "") -> dict:
         """Stage a proposed command. This only records it for human review — it does not run anything."""
         command = command.strip()
+        if has_control_chars(command):
+            raise ValueError("command must be a single line with no control characters")
         item = {
             "id": next(self._ids),
             "command": command,

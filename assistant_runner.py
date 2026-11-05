@@ -22,7 +22,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from assistant import ProposalStore
+from assistant import ProposalStore, has_control_chars
 
 MODEL_ENV = "MARAUDER_CONSOLE_CLAUDE_MODEL"
 DEFAULT_MODEL = "claude-sonnet-5-5"
@@ -160,6 +160,8 @@ def _dispatch(name: str, tool_input: dict, ctx: ChatContext) -> Any:
         command = str(tool_input.get("command", "")).strip()
         if not command:
             return {"error": "empty command"}
+        if has_control_chars(command):
+            return {"error": "a command must be one line; propose each command separately"}
         p = ctx.proposals.propose(command, str(tool_input.get("rationale", "")))
         # Note the enqueue-only nature back to the model so it never claims execution.
         return {

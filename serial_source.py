@@ -97,6 +97,9 @@ class RealSerialSource(SerialSource):
     async def write_line(self, line: str) -> None:
         if self._writer is None:
             raise SerialError("Port is closed")
+        if "\r" in line or "\n" in line:
+            # Last line of defence: one call must never turn into several commands on the board.
+            raise SerialError("Command must be a single line")
         self._writer.write((line + "\r\n").encode())
         await self._writer.drain()
 

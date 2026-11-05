@@ -1,4 +1,5 @@
-fastapi>=0.110
+# >=0.132 rejects JSON bodies sent without a JSON Content-Type (blocks no-preflight cross-site POSTs).
+fastapi>=0.132
 uvicorn[standard]>=0.27
 pyserial>=3.5
 pyserial-asyncio>=0.6

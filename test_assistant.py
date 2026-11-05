@@ -12,7 +12,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from assistant import ProposalStore, command_transmits
+from assistant import ProposalStore, command_transmits, has_control_chars
 from bridge import create_app
 
 
@@ -67,4 +67,17 @@ def test_dismiss_and_clear_endpoints(client: TestClient) -> None:
     assert client.delete(f"/api/assistant/proposals/{pid}").json()["ok"] is True
     client.post("/api/assistant/proposals", json={"command": "scanall"})
     assert client.delete("/api/assistant/proposals").json()["ok"] is True
+    assert client.get("/api/assistant/proposals").json()["proposals"] == []
+
+
+@pytest.mark.parametrize(
+    "command", ["list\nattack -t deauth", "info\r\nattack -t beacon", "scanap\rx", "a\x00b"]
+)
+def test_multiline_or_control_char_proposal_rejected(client: TestClient, command: str) -> None:
+    # The transmit flag only looks at the first word, so a hidden second line could pose as harmless.
+    assert has_control_chars(command)
+    with pytest.raises(ValueError):
+        ProposalStore().propose(command)
+    resp = client.post("/api/assistant/proposals", json={"command": command})
+    assert resp.status_code == 400
     assert client.get("/api/assistant/proposals").json()["proposals"] == []
