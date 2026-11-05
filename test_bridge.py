@@ -410,3 +410,36 @@ async def test_manager_disconnect_releases_source() -> None:
     assert mgr.connected is False
     with pytest.raises(SerialError):
         await mgr.send_command("info")
+
+
+class _FakeWs:
+    """Stands in for a websocket: records what it was sent, or never finishes sending (a stalled client)."""
+
+    def __init__(self, *, stalled: bool = False) -> None:
+        self.stalled = stalled
+        self.sent: list[str] = []
+        self.closed = False
+
+    async def send_text(self, payload: str) -> None:
+        if self.stalled:
+            await asyncio.Event().wait()  # never returns
+        self.sent.append(payload)
+
+    async def close(self, code: int = 1000) -> None:
+        self.closed = True
+
+
+async def test_stalled_websocket_client_is_dropped_without_blocking_others(monkeypatch) -> None:
+    import bridge
+
+    monkeypatch.setattr(bridge, "WS_SEND_TIMEOUT", 0.05)
+    mgr = SerialManager(mock=True, port="mock://x", baud=115200)
+    fast, slow = _FakeWs(), _FakeWs(stalled=True)
+    mgr._clients.update({fast, slow})  # type: ignore[arg-type]
+
+    await asyncio.wait_for(mgr._broadcast({"type": "line", "data": "hello"}), timeout=2)
+
+    assert len(fast.sent) == 1
+    assert slow not in mgr._clients and fast in mgr._clients
+    await asyncio.sleep(0)  # let the background close run
+    assert slow.closed is True

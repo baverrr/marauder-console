@@ -54,6 +54,8 @@ from serial_source import (
 from session_store import SessionRecorder, SessionStore, resolve_data_dir
 
 HOST = "127.0.0.1"
+# Seconds a websocket client gets to accept one message before it's dropped (see SerialManager._broadcast).
+WS_SEND_TIMEOUT = 5.0
 PORT = 8200  # the console's HTTP/WS port; separate from the TV remote's 8198/8199
 FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 # Commands that keep streaming until stopscan; the bridge marks itself "running" while one is active.
@@ -146,6 +148,7 @@ class SerialManager:
         self.firmware: str | None = None
         self.running = False  # a streaming command is active
         self._clients: set[WebSocket] = set()
+        self._close_tasks: set[asyncio.Task] = set()  # keeps background closes of dropped clients alive
         self._reader_task: asyncio.Task[None] | None = None
         self._history: deque[str] = deque(maxlen=300)  # replayed to late-joining websockets
         self._hist_lock = threading.Lock()  # guards _history (read from a worker thread by the assistant)
@@ -298,15 +301,34 @@ class SerialManager:
         await self._broadcast({"type": "status", "data": self.status()})
 
     async def _broadcast(self, message: dict) -> None:
+        # Send to every client at once, each with a deadline. The pump awaits this, so one client that has
+        # stopped reading (a sleeping laptop, a stalled proxy hop) must not freeze the serial stream for
+        # everyone: it gets dropped after WS_SEND_TIMEOUT instead.
         payload = json.dumps(message)
-        dead: list[WebSocket] = []
-        for ws in list(self._clients):
-            try:
-                await ws.send_text(payload)
-            except Exception:  # noqa: BLE001 - client went away
-                dead.append(ws)
-        for ws in dead:
-            self._clients.discard(ws)
+        clients = list(self._clients)
+        if not clients:
+            return
+        results = await asyncio.gather(*(self._send(ws, payload) for ws in clients))
+        for ws, ok in zip(clients, results, strict=True):
+            if not ok:
+                self._clients.discard(ws)
+                task = asyncio.create_task(self._close_quietly(ws))
+                self._close_tasks.add(task)
+                task.add_done_callback(self._close_tasks.discard)
+
+    @staticmethod
+    async def _send(ws: WebSocket, payload: str) -> bool:
+        try:
+            await asyncio.wait_for(ws.send_text(payload), WS_SEND_TIMEOUT)
+        except Exception:  # noqa: BLE001 - client went away or is too slow
+            return False
+        return True
+
+    @staticmethod
+    async def _close_quietly(ws: WebSocket) -> None:
+        # The client's own /ws handler then sees the disconnect and exits.
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(ws.close(code=1011), WS_SEND_TIMEOUT)
 
 
 def create_app(
