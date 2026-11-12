@@ -60,6 +60,7 @@ jobs:
         run: frontend/node_modules/.bin/tauri build --bundles deb --config src-tauri/tauri.bundle.conf.json
 
       - name: Build the AppImage bundle (best-effort)
+        id: appimage
         continue-on-error: true
         run: >-
           frontend/node_modules/.bin/tauri build --bundles appimage
@@ -69,14 +70,18 @@ jobs:
         run: zip -r marauder-firmware-cyd.zip firmware scripts/flash-firmware.sh requirements-flash.txt
 
       - name: Collect artifacts
+        env:
+          APPIMAGE_OUTCOME: ${{ steps.appimage.outcome }}
         run: |
           mkdir -p dist-artifacts
-          find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) \
-            -exec cp {} dist-artifacts/ \;
+          # The .deb is required. The AppImage step may fail on its own; then a half-written AppImage
+          # must not ship, and the run and the release notes say it is missing.
+          if [ "$APPIMAGE_OUTCOME" = success ]; then
+            find src-tauri/target/release/bundle -type f -name '*.AppImage' -exec cp {} dist-artifacts/ \;
+          fi
+          find src-tauri/target/release/bundle -type f -name '*.deb' -exec cp {} dist-artifacts/ \;
           cp marauder-firmware-cyd.zip dist-artifacts/
           ls -lh dist-artifacts/
-          # The .deb is required. The AppImage step may fail on its own, so say so loudly instead of
-          # shipping a release that is quietly missing it.
           ls dist-artifacts/*.deb >/dev/null
           if ! ls dist-artifacts/*.AppImage >/dev/null 2>&1; then
             echo "::warning title=No AppImage::The AppImage build failed, so this build has only the .deb and the firmware."
@@ -88,15 +93,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
         # Use the preinstalled gh CLI (no third-party release action). Create the release if it doesn't
-        # exist yet, otherwise just attach/replace the files.
+        # exist yet. If it does (a re-run), replace the files; and when this build has no AppImage, also
+        # say so in the notes and remove the older AppImage so it can't be taken for this build's.
         run: |
           notes="Automated desktop bundle."
           if [ -n "${APPIMAGE_MISSING:-}" ]; then
             notes="$notes The AppImage build failed this time, so only the .deb is attached."
           fi
-          gh release create "$TAG" dist-artifacts/* --title "$TAG" --notes "$notes" \
-            || gh release upload "$TAG" dist-artifacts/* --clobber
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" dist-artifacts/* --title "$TAG" --notes "$notes"
+            exit 0
+          fi
+          gh release upload "$TAG" dist-artifacts/* --clobber
+          if [ -n "${APPIMAGE_MISSING:-}" ]; then
+            gh release edit "$TAG" --notes "$notes"
+            gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".AppImage"))' \
+              | while IFS= read -r name; do
+                  echo "Removing the older $name"
+                  gh release delete-asset "$TAG" "$name" -y
+                done
+          fi
 
       - name: Upload as a workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
