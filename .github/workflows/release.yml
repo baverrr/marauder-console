@@ -1,6 +1,7 @@
 name: Release bundle
 
-# Build the desktop bundle (AppImage + .deb) and package the matching firmware on a version tag.
+# Build the desktop bundle (.deb, plus the AppImage when its build succeeds) and package the matching
+# firmware on a version tag.
 on:
   push:
     tags: ["v*"]
@@ -84,7 +85,12 @@ jobs:
           ls -lh dist-artifacts/
           ls dist-artifacts/*.deb >/dev/null
           if ! ls dist-artifacts/*.AppImage >/dev/null 2>&1; then
-            echo "::warning title=No AppImage::The AppImage build failed, so this build has only the .deb and the firmware."
+            if [ "$APPIMAGE_OUTCOME" = success ]; then
+              why="The AppImage step passed but left no .AppImage under src-tauri/target/release/bundle"
+            else
+              why="The AppImage build failed"
+            fi
+            echo "::warning title=No AppImage::$why, so this build has only the .deb and the firmware."
             echo "APPIMAGE_MISSING=1" >> "$GITHUB_ENV"
           fi
 
@@ -95,25 +101,28 @@ jobs:
           TAG: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
         # Use the preinstalled gh CLI (no third-party release action). Create the release if it doesn't
-        # exist yet. If it does (a re-run), replace the files; and when this build has no AppImage, also
-        # say so in the notes and remove the older AppImage so it can't be taken for this build's.
+        # exist yet. If it does (a re-run), replace the files and rewrite the notes to match this build;
+        # when this build has no AppImage, also remove the older one so it can't be taken for this build's.
+        # The default shell has no pipefail, so the asset list is read into a variable, where a failed
+        # gh call stops the step instead of looking like an empty list.
         run: |
           notes="Automated desktop bundle."
           if [ -n "${APPIMAGE_MISSING:-}" ]; then
-            notes="$notes The AppImage build failed this time, so only the .deb is attached."
+            notes="$notes The AppImage build failed this time, so only the .deb and the firmware zip are attached."
           fi
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          if ! gh release view "$TAG" >/dev/null; then
             gh release create "$TAG" dist-artifacts/* --title "$TAG" --notes "$notes"
             exit 0
           fi
           gh release upload "$TAG" dist-artifacts/* --clobber
+          gh release edit "$TAG" --notes "$notes"
           if [ -n "${APPIMAGE_MISSING:-}" ]; then
-            gh release edit "$TAG" --notes "$notes"
-            gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".AppImage"))' \
-              | while IFS= read -r name; do
-                  echo "Removing the older $name"
-                  gh release delete-asset "$TAG" "$name" -y
-                done
+            old=$(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".AppImage"))')
+            while IFS= read -r name; do
+              [ -n "$name" ] || continue
+              echo "Removing the older $name"
+              gh release delete-asset "$TAG" "$name" -y
+            done <<<"$old"
           fi
 
       - name: Upload as a workflow artifact

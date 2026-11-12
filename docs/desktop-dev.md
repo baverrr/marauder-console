@@ -127,7 +127,8 @@ will bundle the ESP32 Marauder firmware + flashing so the console and firmware s
   `anthropic`/`keyring` deps) into a one-file sidecar; `scripts/build-bundle.sh` builds the AppImage +
   `.deb` via `tauri build --config src-tauri/tauri.bundle.conf.json` (the overlay carries `externalBin`
   so a plain `cargo build`/`tauri dev` still works without a prebuilt sidecar). `.github/workflows/release.yml`
-  does this on a `v*` tag and attaches the AppImage, `.deb` and a firmware+flasher zip to the release.
+  does this on a `v*` tag and attaches the `.deb`, the AppImage when it builds, and a firmware+flasher zip
+  to the release.
   `./install.sh --desktop` wires the same desktop install for the current user. The README now carries a
   Claude-panel screenshot and a refreshed `docs/architecture.svg` (desktop shell, Analysis tabs, the
   assistant→Anthropic path, and firmware flashing), which completes Phase 5.
