@@ -29,3 +29,5 @@ src-tauri/binaries/
 /build/
 /dist/
 *.spec
+# Local tool state (Claude Code, Serena)
+.serena/

@@ -116,6 +116,7 @@ bash scripts/flash-firmware.sh --port /dev/ttyUSB0
 - How it fits together: [architecture diagram](docs/diagrams/architecture.svg)
 - Run the tests: `./venv/bin/python -m pytest`
 - Custom firmware add-ons: [firmware/](firmware/)
+- Security check: `bandit -r .` reads its settings from `.bandit`, which says why each one is there.
 </details>
 
 ## License

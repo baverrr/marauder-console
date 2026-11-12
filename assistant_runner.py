@@ -18,6 +18,7 @@ this module — and running the tests, which inject a fake client — needs neit
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -49,6 +50,8 @@ can run.
 
 Ground your answers in the live state and the operator's files using the read-only tools before \
 speculating. Be concise and practical."""
+
+log = logging.getLogger(__name__)
 
 
 def _tool_schemas() -> list[dict]:
@@ -276,8 +279,8 @@ class KeyStore:
         if kr is not None and key:
             try:
                 kr.set_password(self.SERVICE, self.ACCOUNT, key)
-            except Exception:  # noqa: BLE001 - keychain locked/unavailable; in-memory still works
-                pass
+            except Exception as e:  # noqa: BLE001 - keychain locked/unavailable; in-memory still works
+                log.warning("Couldn't save the API key to the keychain, so it's forgotten on quit: %s", e)
 
     def get(self) -> str | None:
         env = os.environ.get("ANTHROPIC_API_KEY")
@@ -289,7 +292,7 @@ class KeyStore:
                 stored = kr.get_password(self.SERVICE, self.ACCOUNT)
                 if stored:
                     return stored
-            except Exception:  # noqa: BLE001
+            except Exception:  # nosec B110  # noqa: BLE001 - keychain locked/unavailable: fall back to memory
                 pass
         return self._mem
 
@@ -299,8 +302,10 @@ class KeyStore:
         if kr is not None:
             try:
                 kr.delete_password(self.SERVICE, self.ACCOUNT)
-            except Exception:  # noqa: BLE001 - nothing stored / unavailable
-                pass
+            except kr.errors.PasswordDeleteError:
+                pass  # nothing was stored  # nosec B110
+            except Exception as e:  # noqa: BLE001 - keychain locked or unavailable
+                log.warning("Couldn't remove the API key from the keychain, so it may still be stored: %s", e)
 
     def has(self) -> bool:
         return bool(self.get())

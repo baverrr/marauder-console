@@ -91,7 +91,7 @@ class RealSerialSource(SerialSource):
             writer.close()
             try:
                 await writer.wait_closed()
-            except Exception:  # noqa: BLE001 - closing a vanished port is fine
+            except Exception:  # nosec B110  # noqa: BLE001 - closing a vanished port is fine
                 pass
 
     async def write_line(self, line: str) -> None:
@@ -362,7 +362,7 @@ def _fake_adv_hex(n: int) -> str:
 def _fake_stream_line(command: str, n: int) -> str:
     """One line of generic simulated scan output. All addresses are documentation placeholders."""
     mac = f"00:00:5e:00:53:{(n % 256):02x}"  # RFC 7042 documentation MAC range
-    rssi = -40 - random.randint(0, 50)
+    rssi = -40 - random.randint(0, 50)  # nosec B311: mock signal data
     verb = command.split()[0].lower()
     if verb.startswith("sniffbt"):
         # Real firmware prints a bare "<rssi> <mac>" for BLE sniffs like `sniffbt -t airtag` — match it
@@ -378,7 +378,7 @@ def _fake_stream_line(command: str, n: int) -> str:
     if verb == "portscan":
         return f"[{n:03d}] 192.0.2.10:{1000 + n} open (mock)"
     if verb == "packetcount":
-        return f"[{n:03d}] ch {n % 13 + 1}: {random.randint(0, 200)} pkts (mock)"
+        return f"[{n:03d}] ch {n % 13 + 1}: {random.randint(0, 200)} pkts (mock)"  # nosec B311: mock packet counts
     if verb == "mactrack":
         return f"[{n:03d}] target {mac}  RSSI {rssi}  (mock)"
     if verb == "karma":
